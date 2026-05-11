@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Test outputs
+test_images/debug_output/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env
+.env
+.env.local
+
+# Test scripts (keep test_images for demo)
+test_triple_x_fix.py
+debug_cv_detection.py
+karyogram_suite_analysis.py
+karyogram_suite_report.txt
+test_syndromes.py

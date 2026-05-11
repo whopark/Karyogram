@@ -1,0 +1,350 @@
+================================================================================
+                    CHROMOSOME KARYOTYPE ANALYZER
+                          User Manual v1.0
+================================================================================
+
+                    AI-Powered Cytogenetic Analysis Tool
+                 ISCN 2020 Compliant | Multi-Provider AI
+
+================================================================================
+                           TABLE OF CONTENTS
+================================================================================
+
+1. Introduction
+2. Getting Started
+3. Analysis Modes
+4. Step-by-Step Usage Guide
+5. Understanding Results
+6. API Key Management
+7. Supported Conditions
+8. Troubleshooting
+9. Technical Notes
+10. Disclaimer
+
+================================================================================
+1. INTRODUCTION
+================================================================================
+
+The Chromosome Karyotype Analyzer is an AI-powered tool for analyzing
+chromosome metaphase spread images. It generates ISCN 2020 compliant
+karyotype notations and provides clinical interpretations.
+
+Key Features:
+- Multiple AI provider support (OpenAI GPT-4 Vision, Claude, Gemini)
+- CV + VLM Hybrid mode for improved accuracy
+- Automatic chromosome counting and sex chromosome identification
+- Detection of numerical abnormalities (trisomies, monosomies)
+- ISCN 2020 standard notation output
+- Downloadable reports (Text and JSON formats)
+
+================================================================================
+2. GETTING STARTED
+================================================================================
+
+2.1 Access the Application
+--------------------------
+- Local: http://localhost:8501
+- Online: https://fantastic-essence-production.up.railway.app
+
+2.2 Requirements
+----------------
+- A metaphase spread image (PNG, JPG, JPEG, TIFF, or BMP)
+- An API key from one of the supported providers:
+  * OpenAI: https://platform.openai.com/api-keys
+  * Anthropic: https://console.anthropic.com/
+  * Google: https://makersuite.google.com/app/apikey
+
+2.3 Image Requirements
+----------------------
+For best results, use images that are:
+- High resolution (minimum 500x500 pixels recommended)
+- Clear chromosome spreads with good contrast
+- Minimal overlapping chromosomes
+- G-banded metaphase spreads preferred
+- File size under 10MB
+
+================================================================================
+3. ANALYSIS MODES
+================================================================================
+
+3.1 OpenAI GPT-4 Vision
+-----------------------
+- Uses GPT-4 Vision model for direct image analysis
+- Best for: General karyotype analysis
+- Requires: OpenAI API key
+
+3.2 CV + VLM Hybrid (Recommended)
+---------------------------------
+- Combines Computer Vision with Vision Language Model
+- Stage 1: OpenCV detects and counts chromosomes
+- Stage 2: VLM interprets the counts and provides clinical analysis
+- Best for: Accurate chromosome counting, detecting trisomies
+- Requires: OpenAI API key
+
+3.3 Demo Mode (No API)
+----------------------
+- Generates simulated results for demonstration
+- Does NOT perform actual image analysis
+- Best for: Testing the interface without an API key
+- No API key required
+
+================================================================================
+4. STEP-BY-STEP USAGE GUIDE
+================================================================================
+
+Step 1: Select Analysis Mode
+----------------------------
+1. Open the application in your browser
+2. In the left sidebar under "API Provider", select your preferred mode:
+   - "OpenAI GPT-4 Vision" for VLM-only analysis
+   - "CV + VLM (Hybrid)" for more accurate counting (recommended)
+   - "Demo Mode (No API)" for testing without API key
+
+Step 2: Enter API Key (if required)
+-----------------------------------
+1. Enter your API key in the text field
+2. Click "Save" to persist the key in your browser (optional)
+3. The key will be remembered for future sessions
+
+Step 3: Upload Image
+--------------------
+1. Click "Choose File" or drag and drop an image
+2. Supported formats: PNG, JPG, JPEG, TIFF, BMP
+3. Maximum file size: 10MB
+4. The image preview will appear once uploaded
+
+Step 4: Analyze
+---------------
+1. Click the "Analyze with [Provider]" button
+2. Wait for the analysis to complete (typically 10-30 seconds)
+3. A progress bar will show the analysis status
+
+Step 5: Review Results
+----------------------
+1. View the karyotype notation (e.g., "46,XY" or "47,XX,+21")
+2. Check chromosome count and sex chromosomes
+3. Review any detected abnormalities
+4. Read the clinical interpretation
+
+Step 6: Download Reports (Optional)
+-----------------------------------
+1. Click "Download Text Report" for a readable summary
+2. Click "Download JSON Data" for structured data
+
+================================================================================
+5. UNDERSTANDING RESULTS
+================================================================================
+
+5.1 ISCN Notation
+-----------------
+The International System for Human Cytogenomic Nomenclature (ISCN) format:
+
+  [total count],[sex chromosomes],[abnormalities]
+
+Examples:
+  46,XY        - Normal male (46 chromosomes, X and Y)
+  46,XX        - Normal female (46 chromosomes, two X)
+  47,XX,+21    - Female with Down syndrome (extra chromosome 21)
+  47,XXX       - Triple X syndrome (extra X chromosome)
+  47,XXY       - Klinefelter syndrome (extra X in male)
+  45,X         - Turner syndrome (missing X chromosome)
+
+5.2 Chromosome Count
+--------------------
+- Normal: 46 chromosomes
+- Trisomy: 47 chromosomes (one extra)
+- Monosomy: 45 chromosomes (one missing)
+- Polyploidy: 69 or 92 chromosomes
+
+5.3 Sex Chromosomes
+-------------------
+- XX: Female
+- XY: Male
+- X: Turner syndrome (female)
+- XXY: Klinefelter syndrome (male)
+- XXX: Triple X syndrome (female)
+- XYY: XYY syndrome (male)
+
+5.4 Confidence Score
+--------------------
+- 90-100%: High confidence - reliable result
+- 70-89%: Moderate confidence - review recommended
+- Below 70%: Low confidence - manual verification needed
+
+================================================================================
+6. API KEY MANAGEMENT
+================================================================================
+
+6.1 Saving Your API Key
+-----------------------
+1. Enter your API key in the text field
+2. Click the "Save" button
+3. The key is stored in your browser's localStorage
+4. A confirmation message will appear
+
+6.2 Clearing Your API Key
+-------------------------
+1. Click the "Clear" button
+2. The key is removed from localStorage
+3. You will need to re-enter it for future analyses
+
+6.3 Security Notes
+------------------
+- API keys are stored locally in your browser only
+- Keys are never sent to our servers
+- Clear your key when using shared computers
+- Keys persist across browser sessions until cleared
+
+================================================================================
+7. SUPPORTED CONDITIONS
+================================================================================
+
+The analyzer can detect the following conditions:
+
+Numerical Abnormalities:
+------------------------
+- Trisomy 21 (Down syndrome)
+- Trisomy 18 (Edwards syndrome)
+- Trisomy 13 (Patau syndrome)
+- Monosomy X (Turner syndrome)
+- Triple X syndrome (47,XXX)
+- Klinefelter syndrome (47,XXY)
+- XYY syndrome (47,XYY)
+
+Sex Chromosome Variations:
+--------------------------
+- Normal XX (female)
+- Normal XY (male)
+- Various aneuploidies
+
+Normal Karyotypes:
+------------------
+- 46,XX (normal female)
+- 46,XY (normal male)
+
+================================================================================
+8. TROUBLESHOOTING
+================================================================================
+
+Problem: "Parse Error" in results
+---------------------------------
+Cause: The AI response couldn't be parsed correctly
+Solution:
+1. Try analyzing the image again
+2. Ensure the image is clear and well-lit
+3. Try a different analysis mode
+
+Problem: "Invalid API key" error
+--------------------------------
+Cause: The API key format is incorrect
+Solution:
+1. Ensure the key starts with "sk-" (for OpenAI)
+2. Check for extra spaces before/after the key
+3. Verify the key is still valid at the provider's website
+
+Problem: Analysis takes too long
+--------------------------------
+Cause: Large image or server load
+Solution:
+1. Resize the image to under 2000x2000 pixels
+2. Try again during off-peak hours
+3. Check your internet connection
+
+Problem: Low confidence score
+-----------------------------
+Cause: Image quality issues or unusual karyotype
+Solution:
+1. Use a higher resolution image
+2. Ensure chromosomes are well-separated
+3. Use G-banded metaphase spreads
+4. Consider manual verification
+
+Problem: Incorrect chromosome count
+-----------------------------------
+Cause: Overlapping chromosomes or image quality
+Solution:
+1. Use CV + VLM Hybrid mode for better counting
+2. Ensure minimal chromosome overlap in the image
+3. Use higher contrast images
+
+================================================================================
+9. TECHNICAL NOTES
+================================================================================
+
+9.1 CV + VLM Hybrid Mode
+------------------------
+The hybrid mode uses a two-stage analysis:
+
+Stage 1 - Computer Vision:
+- Converts image to grayscale
+- Applies adaptive thresholding
+- Detects chromosome contours
+- Counts total chromosomes
+- Identifies sex chromosome region candidates
+
+Stage 2 - Vision Language Model:
+- Receives CV counts as hints
+- Analyzes the image with context
+- Provides clinical interpretation
+- Generates ISCN notation
+
+9.2 Supported File Formats
+--------------------------
+- PNG (recommended)
+- JPEG/JPG
+- TIFF/TIF
+- BMP
+- Maximum size: 10MB
+
+9.3 Browser Compatibility
+-------------------------
+- Chrome (recommended)
+- Firefox
+- Safari
+- Edge
+- JavaScript must be enabled
+
+================================================================================
+10. DISCLAIMER
+================================================================================
+
+IMPORTANT: FOR EDUCATIONAL AND RESEARCH PURPOSES ONLY
+
+This tool is designed for educational and research purposes. It is NOT
+intended for clinical diagnosis or medical decision-making.
+
+- Results must be validated by qualified cytogenetics professionals
+- Do not use for clinical diagnosis without proper verification
+- The AI may produce incorrect results
+- Always consult a healthcare professional for medical concerns
+
+The developers and providers of this tool accept no liability for any
+decisions made based on its output.
+
+================================================================================
+                              QUICK REFERENCE
+================================================================================
+
+Common ISCN Notations:
+----------------------
+46,XX     - Normal female
+46,XY     - Normal male
+47,XX,+21 - Down syndrome (female)
+47,XY,+21 - Down syndrome (male)
+47,XXX    - Triple X syndrome
+47,XXY    - Klinefelter syndrome
+45,X      - Turner syndrome
+47,XY,+18 - Edwards syndrome (male)
+47,XX,+13 - Patau syndrome (female)
+
+Keyboard Shortcuts:
+-------------------
+None currently implemented
+
+Support:
+--------
+GitHub: https://github.com/whopark/karyotype-analyzer-2
+
+================================================================================
+                          END OF USER MANUAL
+================================================================================
