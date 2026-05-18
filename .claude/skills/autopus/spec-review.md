@@ -1,0 +1,85 @@
+---
+name: spec-review
+description: Multi-provider SPEC review gate skill
+triggers:
+  - spec review
+  - review gate
+  - spec 리뷰
+  - 리뷰 게이트
+category: quality
+level1_metadata: "Multi-provider review, orchestra engine, PASS/REVISE/REJECT verdict"
+---
+
+# SPEC Review Gate Skill
+
+A review gate that validates SPEC document quality using multiple providers.
+Before Step 1, treat `content/rules/spec-quality.md` as the pre-review self-check that spec-writer should already have applied to `spec.md`, `plan.md`, `acceptance.md`, and `research.md`.
+
+## Review Process
+
+### Step 0: spec-writer self-verify
+
+Confirm that the draft went through a first-pass self-check using `content/rules/spec-quality.md`.
+Look for observable traces such as `research.md`'s `## Self-Verify Summary` or `spec.md`'s `## Open Issues`.
+Also prefer the draft's `## Outcome Lock`, `## Completion Debt`, `## Evolution Ideas`, `## Reviewer Brief`, `## Traceability Matrix`, and `## Reference Discipline` as scope-control evidence: review listed blockers and invariants first, treat Completion Debt as blocking, and treat Evolution Ideas or unrelated deeper-layer suggestions as advisory unless they expose critical/security/data integrity risk.
+Do not create or request follow-up/sibling SPECs from Evolution Ideas. A sibling SPEC request is valid only when the draft includes a `## Sibling SPEC Decision` with an allowed reason and bounded ownership.
+If the checklist was skipped or obviously not reflected in the draft, call that out as a completeness or style finding before continuing.
+
+### Step 1: Load SPEC
+
+Load `.autopus/specs/SPEC-{ID}/spec.md` and extract requirements.
+
+### Step 2: Collect Code Context
+
+If `spec.review_gate.auto_collect_context: true`:
+- Scan project source files
+- Collect relevant code within `context_max_lines` limit
+- Include collected code in the review prompt
+
+### Step 3: Multi-Provider Review
+
+Run the review via the Orchestra engine with configured providers (claude, gemini, etc.):
+- Each provider reviews the SPEC independently
+- Results are merged according to the strategy (debate, consensus, etc.)
+
+### Step 4: Verdict
+
+Parse results and determine the final verdict:
+- **PASS**: SPEC approved, update status to "approved"
+- **REVISE**: Revision required, return with list of findings
+- **REJECT**: Fundamental redesign required
+
+### Step 5: Save Results
+
+Save `review.md` to the SPEC directory:
+- Final verdict
+- Findings from each provider
+- Original responses
+
+## CLI Usage
+
+```bash
+auto spec review SPEC-PIPE-001
+auto spec review SPEC-AUTH-001 --strategy debate --timeout 180
+```
+
+## Configuration (autopus.yaml)
+
+```yaml
+spec:
+  review_gate:
+    enabled: true
+    strategy: debate
+    providers: [claude, gemini]
+    judge: claude
+    max_revisions: 2
+    auto_collect_context: true
+    context_max_lines: 500
+```
+
+## Provider Fallback
+
+If a configured provider binary is not installed:
+- Skip that provider and output a warning
+- Continue review with available providers only
+- Return an error if no providers are available

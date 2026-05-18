@@ -1,0 +1,157 @@
+---
+description: "SPEC 구현 — SPEC 문서를 기반으로 코드를 구현합니다"
+---
+
+# auto-go — SPEC 구현
+
+## Autopus Branding
+
+When handling this workflow, start the response with the canonical banner from `templates/shared/branding-formats.md.tmpl`:
+
+```text
+🐙 Autopus ─────────────────────────
+```
+
+End the completed response with `🐙`.
+
+
+**프로젝트**: Karyogram | **모드**: full
+
+## 사용법
+
+SPEC-ID를 인자로 받아 구현을 실행합니다.
+
+공통 플래그 의미는 `@auto go ...` 라우터를 우선합니다:
+- `--continue`
+- `--team`
+- `--solo`
+- `--auto`
+- `--loop`
+- `--multi`
+- `--quality <mode>`
+
+## Context Load
+
+- 구현 전에 `ARCHITECTURE.md`, `.autopus/project/product.md`, `structure.md`, `tech.md`, `workspace.md`, `scenarios.md`, `canary.md`를 우선 읽어 현재 프로젝트 컨텍스트를 복원합니다.
+- 위 문서가 없으면 컨텍스트 부재를 명시하고 필요 시 `@auto setup`을 권장하되, 현재 구현 작업 자체는 계속 진행할 수 있습니다.
+
+## SPEC Path Resolution
+
+- SPEC-ID를 받으면 먼저 실제 `SPEC_PATH`, `SPEC_DIR`, `TARGET_MODULE`, `WORKING_DIR`를 해석합니다.
+- 해석 순서:
+  1. `.autopus/specs/{SPEC-ID}/spec.md`
+  2. `**/.autopus/specs/{SPEC-ID}/spec.md` 재귀 탐색 (`.git`, `node_modules`, `vendor`, `.cache`, `dist` 제외)
+- 이후 SPEC 로드, 관련 문서 열기, 테스트/빌드 실행, 서브에이전트 프롬프트 주입에는 해석된 값을 사용합니다.
+- `.autopus/specs/{SPEC-ID}` 상대 경로를 현재 작업 디렉터리 기준으로 고정 가정하지 않습니다.
+
+## Review Gate Resolution
+
+- `draft` guard 전에 `autopus.yaml`의 `spec.review_gate.enabled` 를 먼저 읽어 `REVIEW_GATE_ENABLED` 를 확정합니다.
+- 조회 우선순위:
+  1. `WORKING_DIR/autopus.yaml`
+  2. workspace root `autopus.yaml`
+- `spec.md` 본문이나 `review-findings.json` 유무만 보고 review gate를 추론하지 않습니다.
+- `SPEC_STATUS == draft && REVIEW_GATE_ENABLED == true` 이면 `LOOP_MODE`/`AUTO_MODE` 조합으로 분기합니다 (전체 계약은 `.codex/skills/auto-go.md` 참조):
+  - `--loop` 없음 + `--auto` 없음 → 구현 진행 금지, `@auto spec review` 안내 후 중단.
+  - `--loop` 없음 + `--auto` 있음 → review 1회 트리거 후 `approved` 일 때만 진행.
+  - `--loop` 있음 (auto 무관) → SPEC Quality Loop (max 3 iter + bootstrap) 진입. spec-writer revise → re-review → PASS/circuit break까지.
+- review gate 단일 iteration의 REVISE 반복은 `auto spec review`의 `max_revisions` 루프에 맡기고, SPEC Quality Loop는 그 위에서 verdict 단위 외부 사이클을 형성합니다.
+
+## 구현 절차
+
+1. RED: 실패 테스트 작성
+2. GREEN: 최소 구현으로 통과
+3. REFACTOR: 코드 개선
+
+## Supervisor Checklist
+
+- Step 0: 먼저 현재 요청이 read-heavy 탐색인지, write-heavy 구현인지 분류합니다
+- 기본 subagent pipeline이면 Phase 1 전에 `spawn_agent(...)` availability를 preflight하고 workflow authenticity evidence를 초기화합니다
+- 파일 소유권이 겹치지 않을 때만 병렬 executor를 사용합니다
+- worker를 스폰할 때는 owned paths, 수정 금지 범위, verification, next required step을 명시합니다
+- validation 실패 시 전체 파이프라인을 다시 돌리지 말고 실패한 slice만 좁혀서 재시도합니다
+- review는 discovery와 verification을 분리합니다. `--multi` 추가 검증은 review discovery 단계에만 집중합니다
+- 종료 전에는 다음 필수 단계가 완료됐는지, 아니면 명시적 blocker가 남았는지 확인합니다
+
+## Workflow Authenticity Evidence
+
+- 기본 subagent pipeline 완료 응답에는 `subagent_dispatch_count`, `subagent_roles_dispatched`, `degraded-mode`가 포함되어야 합니다.
+- JSON/report consumers를 위해 `degraded_mode`도 같은 값으로 포함하고 `delegation_depth`, `delegation_depth_cap`, `safety_rail_decisions`를 초기화해야 합니다.
+- subagent pipeline 모드에서 dispatch를 만들거나 관측할 수 없으면 Phase 1 전에 workflow authenticity blocker로 중단합니다.
+- workflow authenticity blocker는 working subagent surface로 재실행하거나 명시적으로 `--solo`를 선택하라고 안내해야 합니다.
+- `--solo`는 `subagent_dispatch_count: 0`으로 보고하되 degraded-mode pipeline처럼 표현하지 않습니다.
+
+## Autonomous Review Loop Contract
+
+- `--auto --loop`에서 review가 actionable finding을 반환하면, 같은 invocation 안에서 즉시 `fix -> validate -> test -> review verify` 루프로 이어갑니다.
+- review retry budget이 남아 있는 동안에는 사용자에게 수동 수정, 재실행, 확인을 요청하지 않습니다.
+- 수동 개입은 요구사항 충돌, 외부 credential/승인 필요, retry budget 소진, circuit break 같은 실제 blocker일 때만 허용합니다.
+- `Completion Handoff Gates`는 terminal state에서만 출력합니다. review finding이 아직 fixable한데 `@auto go --continue` 또는 수동 review를 next step으로 제시하면 안 됩니다.
+- `go` 성공의 terminal handoff는 `@auto sync {SPEC-ID}` 까지입니다. `go`가 `sync`를 자동 호출하지는 않지만, review 수렴 전에는 sync handoff도 출력하지 않습니다.
+
+## Sync Readiness Gate
+
+최종 handoff 전에 sync가 뒤늦게 구현 누락을 발견하지 않도록 다음을 확정합니다.
+
+- `completion_verdict_preview`: sync의 Completion Verdict와 같은 형식으로 Outcome Lock, mandatory requirements, Must acceptance, Completion Debt, Evolution Ideas를 요약합니다.
+- `sync_ready`: Outcome Lock 만족, mandatory requirements 전부 충족, Must acceptance 전부 충족, Completion Debt `none`일 때만 `yes`.
+- `sync_blockers`: `none` 또는 `implemented` 상태 전환을 막는 blocker 목록.
+- `spec_status_after_go`: 성공 시 `implemented`. `done`/`completed`를 사용하지 않습니다. `completed`는 sync 전용 상태입니다.
+- `sync_evidence_refs`: 변경 파일, 검증 명령, Phase 4 verdict, @AX annotation 결과 또는 `@AX: no-op`.
+
+`sync_ready != yes`이면 workflow lifecycle bar와 sync handoff를 출력하지 말고 blocker를 먼저 해결합니다.
+
+## Completion Handoff Gates
+
+최종 응답을 성공처럼 닫기 전에 아래 항목을 모두 확정합니다.
+
+- `current_gate`
+- `phase_4_review_verdict` 또는 blocker
+- `completion_verdict_preview`
+- `sync_ready`
+- `sync_blockers`
+- `spec_status_after_go`
+- `sync_evidence_refs`
+- `subagent_dispatch_count`
+- `subagent_roles_dispatched`
+- `degraded-mode`
+- `next_required_step`
+- `next_command`
+- `auto_progression_state`
+
+규칙:
+- `--loop`여도 handoff를 생략하지 않습니다.
+- handoff는 terminal state에서만 사용합니다. retry budget이 남은 in-progress review loop에는 적용하지 않습니다.
+- 하나라도 비어 있으면 workflow lifecycle bar와 다음 명령을 포함한 handoff를 먼저 채웁니다.
+- Gate가 미충족이면 success-style completion summary로 종료하지 말고 pending gate와 blocker를 명시합니다.
+- 성공 경로에서는 workflow lifecycle bar를 먼저 보여준 뒤 `next_required_step` 과 `next_command` 를 출력합니다.
+
+## 품질 기준
+
+- 테스트 커버리지: 85%+
+- LSP 에러: 0
+- 린트 에러: 0
+- 파일 크기 제한: 소스 코드 파일 300줄 이하 (SPEC Markdown은 제외)
+
+## QAMESH Scope Budget
+
+- `go` 안에서는 변경 범위와 직접 관련된 affected/fast/smoke QAMESH lane만 실행합니다. 먼저 `auto qa plan --lane fast --format json`으로 Journey Pack, adapter, setup gap을 확인합니다.
+- full GUI/native/release matrix는 `go`에서 기본 실행하지 않습니다. 전체 데스크톱 GUI 탐색은 명시적 `auto qa ...` 실행으로 넘기고, `auto canary`는 post-deploy smoke/status gate로만 사용합니다.
+- QA 신호가 있지만 Journey Pack이 없으면 기본값은 `auto qa init --format json`입니다. 이 명령은 project-local starter와 release gate scaffold를 함께 만듭니다. Journey Pack만 필요하면 `auto qa init --local-only --format json`을 사용합니다. 생성된 pack/workflow는 command, origin, forbidden action, oracle, env 검토 전에는 실행하거나 required gate로 승격하지 않습니다.
+
+## 실패 시
+
+- `--continue` 플래그로 중단점에서 재개
+- 개별 이슈는 `auto-fix`로 수정
+- Codex의 기본 구현 모드는 `spawn_agent(...)` 기반 subagent pipeline입니다
+- Codex에서 `--auto`는 기본 subagent pipeline 진행에 대한 명시적 승인입니다
+- `--auto`가 없고 현재 Codex 런타임 정책이 암묵적 `spawn_agent(...)` 호출을 제한하면, 조용히 단일 세션으로 폴백하지 말고 하네스 기본값과 제약을 명시적으로 설명한 뒤 사용자에게 서브에이전트 진행 여부 또는 `--solo` 선택을 받습니다
+- SPEC 상태가 `draft`이고 review gate가 활성화돼 있으면 다음 규칙을 적용합니다:
+  - `--auto` 없음: 구현을 시작하지 않고 `@auto spec review {SPEC-ID}` 를 먼저 안내한 뒤 중단합니다
+  - `--auto` 있음: `auto spec review {SPEC-ID}` 를 한 번 트리거한 뒤 SPEC 상태를 다시 읽습니다
+  - review gate 내부의 REVISE 반복은 `auto spec review`의 `max_revisions` 루프에 맡기고, `go`가 이를 단발성으로 잘라내지 않습니다
+  - review 결과가 `approved`로 수렴하지 않으면 판정과 findings를 그대로 보여주고 구현으로 진행하지 않습니다
+  - `@auto go --auto`가 review를 재귀 호출해 다시 `go`를 부르는 체인은 금지합니다 (`go` invocation 당 review command 진입 1회가 loop guard입니다)
+- 상세 파이프라인 단계와 phase/gate 계약은 `.codex/skills/agent-pipeline.md`를 따릅니다
+- `--team`은 future native multi-agent surface를 위한 reserved compatibility flag입니다
+- `--multi`는 reviewer/security-auditor/orchestra 기반 추가 검증을 요청하는 의미입니다

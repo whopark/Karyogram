@@ -1,0 +1,39 @@
+---
+name: file-size-limit
+description: Hard limit of 300 lines per source code file
+category: structure
+platform: codex
+---
+
+# File Size Limit
+
+IMPORTANT: No single source code file may exceed 300 lines. This is a HARD limit.
+
+## Thresholds
+
+- Target: Under 200 lines per source code file
+- Warning: 200-300 lines (consider splitting)
+- Hard limit: 300 lines (MUST split before committing)
+
+## Splitting Strategies
+
+- By type: Move struct definitions and methods to separate files
+- By concern: Group related functions (validation, serialization)
+- By layer: Separate handler, service, and repository logic
+
+## Exclusions
+
+This limit applies to source code files only. The following are excluded:
+- SPEC Markdown files under `.autopus/specs/**`: `prd.md`, `spec.md`, `plan.md`, `acceptance.md`, `research.md`, `review.md`
+- Documentation files: `*.md`
+- Documentation files: `*.txt`
+- Documentation files: `*.rst`
+- Configuration files: `*.yaml`
+- Configuration files: `*.yml`
+- Configuration files: `*.json`
+- Configuration files: `*.toml`
+
+## Counting
+
+Count ALL lines including comments, blank lines, and imports.
+Test files follow the same limit.

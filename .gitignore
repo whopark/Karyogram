@@ -14,3 +14,19 @@ nul
 # OS
 Thumbs.db
 .DS_Store
+
+# Autopus-ADK generated files
+.claude/rules/autopus/
+.claude/skills/autopus/
+.claude/commands/auto.md
+.claude/agents/autopus/
+.codex/config.toml
+.codex/skills/
+.gemini/skills/autopus/
+.opencode/
+.agents/skills/
+.agents/plugins/
+.autopus/
+.autopus/design/imports/
+.autopus/runtime/
+.mcp.json
