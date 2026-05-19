@@ -98,9 +98,9 @@ def display_karyogram_analysis(image: Image.Image) -> None:
     # Confidence threshold slider
     conf = st.slider(
         "Detection Confidence Threshold",
-        min_value=0.01, max_value=0.50, value=0.05, step=0.01,
+        min_value=0.01, max_value=0.50, value=0.25, step=0.01,
         help="Lower values detect more chromosomes but may include debris. "
-             "Recommended: 0.05 for current model, 0.25 for well-trained model.",
+             "Recommended: 0.25 for the paired-trained model.",
     )
 
     # Initialize progress widgets and store in session state so helpers can update them

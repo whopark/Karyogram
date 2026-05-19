@@ -38,6 +38,7 @@ Thumbs.db
 *.pt
 *.onnx
 *.pth
+karyotype-analyzer-2/weights/
 karyotype-analyzer-2/runs/
 karyotype-analyzer-2/training/runs/
 karyotype-analyzer-2/training/models/
