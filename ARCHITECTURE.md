@@ -65,7 +65,7 @@ Chromosome Karyotype Analyzer: a Streamlit web application for AI-powered cytoge
 | Hybrid | CV_VLM, TWO_STAGE | CV detection + VLM interpretation |
 | Multi-model | CONSENSUS | Multi-provider voting |
 | Advanced | PRECISION_LENS | 6-stage sequential VLM pipeline |
-| ML Pipeline | YOLO_KARYOGRAM | YOLO detection + CNN classification + visual karyogram |
+| ML Pipeline | YOLO_KARYOGRAM | YOLO detection + ResNet18/CNN classification + visual karyogram |
 | Demo | MOCK | No API needed |
 
 ## Dependencies
@@ -79,19 +79,22 @@ Chromosome Karyotype Analyzer: a Streamlit web application for AI-powered cytoge
 | `opencv-python-headless>=4.8.0` | Computer vision |
 | `Pillow>=10.2.0` | Image processing |
 | `numpy>=1.24.0` | Numerical compute |
-| `torch>=2.0.0` | ML inference (optional, for YOLO Karyogram mode) |
+| `torch>=2.2.0` | ML inference (optional, for YOLO Karyogram mode) |
+| `torchvision>=0.17.0` | Pretrained ResNet18 backbone (optional, for CNN classifier) |
 | `ultralytics>=8.0.0` | YOLOv8 object detection (optional) |
 
 All VLM SDKs and ML packages are optional with `try/except` import guards and `*_AVAILABLE` flags.
 
-## ML Pipeline Modules (SPEC-KARYO-001)
+## ML Pipeline Modules (SPEC-KARYO-001, SPEC-RESNET-001)
 
 | Module | Lines | Role |
 |--------|-------|------|
-| `ml_pipeline.py` | 250 | YOLO detection + CNN classification + ISCN derivation |
+| `training/chromosome_model.py` | 141 | Shared model definitions: ChromosomeResNet18, legacy ChromosomeCNN, transforms, architecture detection |
+| `ml_pipeline.py` | 281 | YOLO detection + CNN/ResNet18 classification + ISCN derivation (backward-compat weight loading) |
 | `karyogram_generator.py` | 141 | Karyogram layout logic + public API |
 | `karyogram_render_helpers.py` | 221 | PIL rendering primitives (rows, pairs, grid) |
-| `karyogram_ui.py` | 300 | Streamlit UI for karyogram mode |
+| `karyogram_ui.py` | 293 | Streamlit UI for karyogram mode |
+| `karyogram_ui_models.py` | 43 | Model loading + progress display (extracted from karyogram_ui) |
 
 ## Deployment
 

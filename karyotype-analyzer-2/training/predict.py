@@ -11,8 +11,20 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import torch.nn as nn
 from PIL import Image
+
+try:
+    from training.chromosome_model import (
+        ChromosomeResNet18, ChromosomeCNN, detect_architecture,
+        IMG_H, IMG_W, LEGACY_IMG_H, LEGACY_IMG_W,
+        IMAGENET_MEAN, IMAGENET_STD, IDX_TO_LABEL, NUM_CLASSES,
+    )
+except ImportError:
+    from chromosome_model import (
+        ChromosomeResNet18, ChromosomeCNN, detect_architecture,
+        IMG_H, IMG_W, LEGACY_IMG_H, LEGACY_IMG_W,
+        IMAGENET_MEAN, IMAGENET_STD, IDX_TO_LABEL, NUM_CLASSES,
+    )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -20,40 +32,13 @@ log = logging.getLogger(__name__)
 # Denver cytogenetic group mapping (members are int for autosomes, str for sex chr)
 DENVER_GROUPS = {
     "A": [1, 2, 3], "B": [4, 5],
-    "C": [6, 7, 8, 9, 10, 11, 12, "X"],
+    "C": [6, 7, 8, 9, 10, 11, 12, "chrX"],
     "D": [13, 14, 15], "E": [16, 17, 18], "F": [19, 20],
-    "G": [21, 22, "Y"],
+    "G": [21, 22, "chrY"],
 }
 
-IDX_TO_LABEL = [f"chr{i}" for i in range(1, 23)] + ["X", "Y"]
+# IDX_TO_LABEL and NUM_CLASSES imported from chromosome_model (chrX/chrY labels)
 AUTOSOME_LABELS = IDX_TO_LABEL[:22]
-NUM_CLASSES = 24
-CROP_H, CROP_W = 64, 32
-
-
-# ---------------------------------------------------------------------------
-# Model definition — must match train_classifier.py exactly
-# ---------------------------------------------------------------------------
-
-class ChromosomeNet(nn.Module):
-    """Small CNN for 24-class chromosome classification (grayscale 64x32 crops)."""
-
-    def __init__(self, num_classes: int = NUM_CLASSES) -> None:
-        super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(1, 32, 3, padding=1), nn.BatchNorm2d(32), nn.ReLU(), nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, 3, padding=1), nn.BatchNorm2d(64), nn.ReLU(), nn.MaxPool2d(2),
-            nn.Conv2d(64, 128, 3, padding=1), nn.BatchNorm2d(128), nn.ReLU(),
-            nn.AdaptiveAvgPool2d((4, 2)),
-        )
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(128 * 4 * 2, 256), nn.ReLU(), nn.Dropout(0.3),
-            nn.Linear(256, num_classes),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.classifier(self.features(x))
 
 
 # ---------------------------------------------------------------------------
@@ -66,29 +51,59 @@ def _detect_device(requested: str) -> torch.device:
     return torch.device(requested)
 
 
-def _load_classifier(weights_path: str, device: torch.device) -> ChromosomeNet:
-    model = ChromosomeNet()
-    state = torch.load(weights_path, map_location=device)
+def _load_classifier(weights_path: str, device: torch.device):
+    """Load classifier with automatic architecture detection.
+
+    Returns (model, crop_size) tuple.
+    """
+    state = torch.load(weights_path, map_location=device, weights_only=True)
     if isinstance(state, dict) and "model_state_dict" in state:
         state = state["model_state_dict"]
+
+    arch = detect_architecture(state)
+    if arch == "resnet18":
+        model = ChromosomeResNet18(pretrained=False)
+        crop_size = (IMG_H, IMG_W)
+        log.info("Detected ResNet18 architecture")
+    else:
+        log.warning("Loading legacy CNN weights — consider retraining with ResNet18")
+        model = ChromosomeCNN()
+        crop_size = (LEGACY_IMG_H, LEGACY_IMG_W)
+
     model.load_state_dict(state)
     model.to(device).eval()
-    log.info("Classifier loaded from %s", weights_path)
-    return model
+    log.info("Classifier loaded from %s (arch=%s)", weights_path, arch)
+    return model, crop_size
 
 
-def _crop_tensor(image: np.ndarray, bbox: list) -> torch.Tensor:
-    """Crop bbox [x,y,w,h] from RGB array; return (1,1,H,W) float tensor."""
+def _crop_tensor(image: np.ndarray, bbox: list, crop_size=None) -> torch.Tensor:
+    """Crop bbox [x,y,w,h] from RGB array; return appropriately shaped tensor."""
+    if crop_size is None:
+        crop_size = (LEGACY_IMG_H, LEGACY_IMG_W)
+
     x, y, w, h = [int(v) for v in bbox]
-    pil = Image.fromarray(image[y: y + h, x: x + w]).convert("L").resize((CROP_W, CROP_H))
-    arr = np.array(pil, dtype=np.float32) / 255.0
-    return torch.from_numpy(arr).unsqueeze(0).unsqueeze(0)
+    ch, cw = crop_size
+
+    if ch == LEGACY_IMG_H and cw == LEGACY_IMG_W:
+        # Legacy: grayscale (1,1,H,W)
+        pil = Image.fromarray(image[y: y + h, x: x + w]).convert("L").resize((cw, ch))
+        arr = np.array(pil, dtype=np.float32) / 255.0
+        return torch.from_numpy(arr).unsqueeze(0).unsqueeze(0)
+    else:
+        # ResNet18: RGB (1,3,H,W) with ImageNet normalization
+        pil = Image.fromarray(image[y: y + h, x: x + w]).convert("RGB").resize((cw, ch))
+        arr = np.array(pil, dtype=np.float32) / 255.0
+        arr = arr.transpose(2, 0, 1)  # HWC -> CHW
+        for c in range(3):
+            arr[c] = (arr[c] - IMAGENET_MEAN[c]) / IMAGENET_STD[c]
+        return torch.from_numpy(arr).unsqueeze(0)
 
 
 # ---------------------------------------------------------------------------
 # Pair-based refinement
 # ---------------------------------------------------------------------------
 
+# @AX:WARN: [AUTO] iterative reassignment algorithm — parallel to _pair_refine in ml_pipeline.py; duplication increases maintenance risk if the algorithm is corrected in one place only
 def _refine_predictions(labels: list, max_iter: int = 10) -> list:
     """Reassign over-represented autosomes to under-represented ones (target=2 each)."""
     labels = list(labels)
@@ -97,7 +112,6 @@ def _refine_predictions(labels: list, max_iter: int = 10) -> list:
         changed = False
         for lbl in AUTOSOME_LABELS:
             while counts.get(lbl, 0) > 2:
-                # Pick most under-represented autosome
                 under = min(
                     (l for l in AUTOSOME_LABELS if counts.get(l, 0) < 2),
                     key=lambda l: counts.get(l, 0),
@@ -105,7 +119,6 @@ def _refine_predictions(labels: list, max_iter: int = 10) -> list:
                 )
                 if under is None:
                     break
-                # Reassign last occurrence (proxy for lowest confidence)
                 idx = len(labels) - 1 - labels[::-1].index(lbl)
                 labels[idx] = under
                 counts[lbl] -= 1
@@ -123,14 +136,14 @@ def _refine_predictions(labels: list, max_iter: int = 10) -> list:
 def _build_karyotype(labels: list) -> dict:
     """Derive sex chromosomes, abnormalities, ISCN notation, and Denver groups."""
     counts = {lbl: labels.count(lbl) for lbl in IDX_TO_LABEL}
-    x, y = counts.get("X", 0), counts.get("Y", 0)
+    x, y = counts.get("chrX", 0), counts.get("chrY", 0)
 
     if x >= 2 and y == 0:
         sex = "XX"
     elif x >= 1 and y >= 1:
         sex = "XY"
     else:
-        sex = "X" * x + "Y" * y  # handles Turner (X), triple-X, etc.
+        sex = "X" * x + "Y" * y
 
     abnormalities = []
     for i in range(1, 23):
@@ -144,7 +157,6 @@ def _build_karyotype(labels: list) -> dict:
     if x == 3:
         abnormalities.append("triple X")
 
-    # ISCN: total,sex[,numeric abnormalities]
     iscn_parts = [str(len(labels)), sex] + [a for a in abnormalities if a[0] in ("+", "-")]
     notation = ",".join(iscn_parts)
 
@@ -160,8 +172,9 @@ def _build_karyotype(labels: list) -> dict:
 # Per-image inference
 # ---------------------------------------------------------------------------
 
-def analyze_image(image_path: Path, detector, classifier: ChromosomeNet,
-                  device: torch.device, conf_threshold: float) -> dict:
+def analyze_image(image_path: Path, detector, classifier,
+                  device: torch.device, conf_threshold: float,
+                  crop_size=None) -> dict:
     """Run full pipeline on one image and return result dict."""
     img_pil = Image.open(image_path).convert("RGB")
     img_np = np.array(img_pil)
@@ -175,7 +188,7 @@ def analyze_image(image_path: Path, detector, classifier: ChromosomeNet,
         w, h = x2 - x1, y2 - y1
         if w < 4 or h < 4:
             continue
-        crop_tensors.append(_crop_tensor(img_np, [x1, y1, w, h]))
+        crop_tensors.append(_crop_tensor(img_np, [x1, y1, w, h], crop_size))
         valid_bboxes.append([x1, y1, w, h])
 
     if not crop_tensors:
@@ -236,7 +249,7 @@ def main() -> None:
     device = _detect_device(args.device)
     log.info("Device: %s", device)
     detector = YOLO(args.detector)
-    classifier = _load_classifier(args.classifier, device)
+    classifier, crop_size = _load_classifier(args.classifier, device)
 
     exts = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
     image_paths = sorted(p for p in Path(args.image_dir).iterdir()
@@ -250,7 +263,9 @@ def main() -> None:
     for img_path in image_paths:
         log.info("  -> %s", img_path.name)
         try:
-            records.append(analyze_image(img_path, detector, classifier, device, args.conf))
+            records.append(analyze_image(
+                img_path, detector, classifier, device, args.conf, crop_size,
+            ))
         except Exception as exc:
             log.error("Failed on %s: %s", img_path.name, exc)
             records.append({"file": img_path.name, "error": str(exc)})

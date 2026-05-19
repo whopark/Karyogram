@@ -1,7 +1,7 @@
 """ml_pipeline.py — Standalone ML inference orchestrator for karyogram generation.
 
-Combines YOLO detection (T1), ChromosomeNet CNN classification (T2), and ISCN
-karyotype derivation (T3). Does not import from app.py or training/.
+Combines YOLO detection (T1), chromosome CNN/ResNet classification (T2), and ISCN
+karyotype derivation (T3). Does not import from app.py.
 """
 
 import logging
@@ -12,8 +12,8 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
+# @AX:NOTE: [AUTO] duplicate constants — NUM_CLASSES and IDX_TO_LABEL also defined in training/chromosome_model.py; keep in sync or replace with import
 NUM_CLASSES = 24
-CROP_H, CROP_W = 64, 32
 IDX_TO_LABEL = [f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY"]
 
 DENVER_GROUPS = {
@@ -38,32 +38,19 @@ try:
 except ImportError:
     _TORCH_AVAILABLE = False
 
-# Model architecture must match training/train_classifier.py exactly
 if _TORCH_AVAILABLE:
-    class ChromosomeNet(nn.Module):
-        """Small CNN for 24-class chromosome classification (grayscale 64x32 crops)."""
-
-        def __init__(self, num_classes: int = NUM_CLASSES) -> None:
-            super().__init__()
-            self.features = nn.Sequential(
-                nn.Conv2d(1, 32, 3, padding=1), nn.BatchNorm2d(32), nn.ReLU(), nn.MaxPool2d(2),
-                nn.Conv2d(32, 64, 3, padding=1), nn.BatchNorm2d(64), nn.ReLU(), nn.MaxPool2d(2),
-                nn.Conv2d(64, 128, 3, padding=1), nn.BatchNorm2d(128), nn.ReLU(),
-                nn.AdaptiveAvgPool2d((4, 2)),
-            )
-            self.classifier = nn.Sequential(
-                nn.Flatten(),
-                nn.Linear(128 * 4 * 2, 256), nn.ReLU(), nn.Dropout(0.3),
-                nn.Linear(256, num_classes),
-            )
-
-        def forward(self, x: "torch.Tensor") -> "torch.Tensor":
-            return self.classifier(self.features(x))
-else:
-    class ChromosomeNet:  # type: ignore[no-redef]
-        """Stub when torch is unavailable."""
-        def __init__(self, *args, **kwargs):
-            raise ImportError("torch is not installed")
+    from training.chromosome_model import (
+        ChromosomeResNet18,
+        ChromosomeCNN,
+        detect_architecture,
+        build_eval_transform,
+        build_legacy_eval_transform,
+        NUM_CLASSES as _MODEL_NUM_CLASSES,
+        IMG_H,
+        IMG_W,
+        LEGACY_IMG_H,
+        LEGACY_IMG_W,
+    )
 
 
 def load_detector(weights_path: Optional[str] = None) -> dict:
@@ -83,7 +70,10 @@ def load_detector(weights_path: Optional[str] = None) -> dict:
 
 
 def load_classifier(weights_path: Optional[str] = None, device=None) -> dict:
-    """Load CNN classifier. Returns {"model": ChromosomeNet, "device": device} or {"error": str}."""
+    """Load classifier with automatic architecture detection.
+
+    Returns {"model": nn.Module, "device": device, "crop_size": (H, W)} or {"error": str}.
+    """
     if not _TORCH_AVAILABLE:
         return {"error": "torch is not installed. Run: pip install torch"}
     path = weights_path or DEFAULT_CLASSIFIER_PATH
@@ -92,14 +82,24 @@ def load_classifier(weights_path: Optional[str] = None, device=None) -> dict:
     try:
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = ChromosomeNet()
-        state = torch.load(path, map_location=device)
+        state = torch.load(path, map_location=device, weights_only=True)
         if isinstance(state, dict) and "model_state_dict" in state:
             state = state["model_state_dict"]
+
+        arch = detect_architecture(state)
+        if arch == "resnet18":
+            model = ChromosomeResNet18(pretrained=False)
+            crop_size = (IMG_H, IMG_W)
+            log.info("Detected ResNet18 architecture in weights")
+        else:
+            log.warning("Loading legacy CNN weights — consider retraining with ResNet18")
+            model = ChromosomeCNN()
+            crop_size = (LEGACY_IMG_H, LEGACY_IMG_W)
+
         model.load_state_dict(state)
         model.to(device).eval()
-        log.info("Classifier loaded from %s on %s", path, device)
-        return {"model": model, "device": device}
+        log.info("Classifier loaded from %s on %s (arch=%s)", path, device, arch)
+        return {"model": model, "device": device, "crop_size": crop_size}
     except Exception as exc:
         return {"error": f"Failed to load classifier: {exc}"}
 
@@ -120,12 +120,32 @@ def detect_chromosomes(detector: dict, image_pil, conf: float = 0.25) -> list:
     return detections
 
 
-def _crop_to_tensor(crop_pil, device):
-    """Resize crop to CROP_HxCROP_W grayscale, normalize [0,1], return (1,1,H,W) tensor."""
-    arr = np.array(crop_pil.convert("L").resize((CROP_W, CROP_H)), dtype=np.float32) / 255.0
-    return torch.from_numpy(arr).unsqueeze(0).unsqueeze(0).to(device)
+def _crop_to_tensor(crop_pil, device, crop_size=None):
+    """Resize crop and return tensor suitable for the detected architecture.
+
+    For ResNet18: produces (1,3,H,W) RGB tensor with ImageNet normalization.
+    For legacy CNN: produces (1,1,H,W) grayscale tensor normalized to [0,1].
+    """
+    if crop_size is None:
+        crop_size = (LEGACY_IMG_H, LEGACY_IMG_W) if _TORCH_AVAILABLE else (64, 32)
+
+    ch, cw = crop_size
+    if ch == LEGACY_IMG_H and cw == LEGACY_IMG_W:
+        # Legacy grayscale path
+        arr = np.array(crop_pil.convert("L").resize((cw, ch)), dtype=np.float32) / 255.0
+        return torch.from_numpy(arr).unsqueeze(0).unsqueeze(0).to(device)
+    else:
+        # ResNet18 RGB path with ImageNet normalization
+        from training.chromosome_model import IMAGENET_MEAN, IMAGENET_STD
+        rgb = crop_pil.convert("RGB").resize((cw, ch))
+        arr = np.array(rgb, dtype=np.float32) / 255.0
+        arr = arr.transpose(2, 0, 1)  # HWC -> CHW
+        for c in range(3):
+            arr[c] = (arr[c] - IMAGENET_MEAN[c]) / IMAGENET_STD[c]
+        return torch.from_numpy(arr).unsqueeze(0).to(device)
 
 
+# @AX:WARN: [AUTO] iterative reassignment algorithm — worst-case O(classes * chromosomes * max_iter); correctness depends on sorted swap order; parallel calls are safe (no shared state)
 def _pair_refine(labels: list, confs: list, max_iter: int = 10) -> list:
     """Reassign over-represented autosomes (target=2) to under-represented ones.
 
@@ -161,7 +181,8 @@ def classify_chromosomes(classifier_info: dict, detections: list) -> list:
     if not detections:
         return []
     model, device = classifier_info["model"], classifier_info["device"]
-    batch = torch.cat([_crop_to_tensor(d["crop"], device) for d in detections], dim=0)
+    crop_size = classifier_info.get("crop_size", None)
+    batch = torch.cat([_crop_to_tensor(d["crop"], device, crop_size) for d in detections], dim=0)
     with torch.no_grad():
         probs = torch.softmax(model(batch), dim=1)
         confs_t, preds_t = probs.max(dim=1)
@@ -185,7 +206,7 @@ def build_karyotype(classifications: list) -> dict:
     elif x_n >= 1 and y_n >= 1:
         sex = "XY"
     else:
-        sex = "X" * x_n + "Y" * y_n  # handles Turner (X), triple-X, etc.
+        sex = "X" * x_n + "Y" * y_n
 
     abnormalities = []
     for i in range(1, 23):

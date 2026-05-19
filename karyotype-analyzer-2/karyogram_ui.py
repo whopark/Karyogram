@@ -9,6 +9,8 @@ import io
 import streamlit as st
 from PIL import Image
 
+from karyogram_ui_models import _load_models, _display_progress
+
 
 # ---------------------------------------------------------------------------
 # Session state keys (prefixed to avoid collision with other app modules)
@@ -27,41 +29,6 @@ _DENVER_GROUPS = [
     ("F", [19, 20], 4),
     ("G", [21, 22], 4),
 ]
-
-
-# ---------------------------------------------------------------------------
-# Model loading (cached across reruns)
-# ---------------------------------------------------------------------------
-
-@st.cache_resource
-def _load_models(_cache_key: str = "v3") -> tuple:
-    """Load YOLO detector and CNN classifier. Cached across reruns.
-
-    Returns:
-        Tuple of (detector_result, classifier_result) dicts.
-    """
-    from ml_pipeline import load_detector, load_classifier  # noqa: PLC0415
-    det = load_detector()
-    cls = load_classifier()
-    # Do not cache error results — clear on next rerun
-    if "error" in det or "error" in cls:
-        st.cache_resource.clear()
-    return det, cls
-
-
-# ---------------------------------------------------------------------------
-# Progress helpers
-# ---------------------------------------------------------------------------
-
-def _display_progress(stage: str, progress: float) -> None:
-    """Update progress bar and status text.
-
-    Args:
-        stage: Human-readable description of the current stage.
-        progress: Float between 0.0 and 1.0.
-    """
-    st.session_state["_karyogram_progress_bar"].progress(progress)
-    st.session_state["_karyogram_status_text"].text(stage)
 
 
 # ---------------------------------------------------------------------------

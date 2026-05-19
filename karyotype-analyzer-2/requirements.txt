@@ -10,6 +10,10 @@ numpy>=1.24.0
 requests>=2.31.0
 python-dateutil>=2.8.2
 
+# ML / Deep Learning
+torch>=2.2.0
+torchvision>=0.17.0
+
 # Vision-Language Model APIs
 openai>=1.12.0
 anthropic>=0.18.0

@@ -177,9 +177,11 @@ def run_training(
     try:
         import torch  # noqa: F401
         from train_classifier import train as train_classifier
+        # @AX:NOTE: [AUTO] magic constant — warmup_epochs hardcoded to 5 here; not exposed as a pair_trainer CLI argument
         clf_args = argparse.Namespace(
             data_dir=crops_dir,
             epochs=epochs_classifier,
+            warmup_epochs=5,
             batch_size=batch_classifier,
             lr=1e-3,
             output=str(classifier_out),

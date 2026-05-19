@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-05-20
+
+### SPEC-RESNET-001: Replace ChromosomeCNN with Pretrained ResNet18 Backbone
+
+**Enhancement**: Replaced the custom 3-block CNN (ChromosomeCNN/ChromosomeNet) with a pretrained ResNet18 backbone for 24-class chromosome classification. Eliminates 3-way model duplication.
+
+**Added**:
+- `training/chromosome_model.py` — Single source of truth for model definitions (ChromosomeResNet18, legacy ChromosomeCNN, transforms, architecture detection)
+- `training/__init__.py` — Package marker for cross-directory imports
+- `karyogram_ui_models.py` — Extracted model loading from karyogram_ui.py
+- Two-phase fine-tuning: frozen backbone warmup → full fine-tuning with differential LR
+- ImageNet normalization (mean/std) applied to all input transforms
+- `detect_architecture()` for backward-compatible weight loading (legacy CNN vs ResNet18)
+- `torchvision>=0.17.0` and `torch>=2.2.0` dependencies
+- `weights_only=True` on all `torch.load` calls (security hardening)
+
+**Changed**:
+- `training/train_classifier.py` — Imports from shared module, two-phase training
+- `ml_pipeline.py` — Imports from shared module, auto-detect architecture on weight load
+- `training/predict.py` — Imports from shared module, unified chrX/chrY label space
+- `training/pair_trainer.py` — Added `warmup_epochs` parameter support
+- `karyogram_ui.py` — Cache key bumped v3→v4, split into ui + ui_models
+
 ## 2026-05-19
 
 ### SPEC-KARYO-001: Metaphase to Karyogram Generation UI
