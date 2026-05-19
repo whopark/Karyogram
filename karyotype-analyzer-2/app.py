@@ -23,6 +23,12 @@ try:
 except ImportError:
     YOLO_AVAILABLE = False
 
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+
 # Vision-Language Model API clients
 try:
     from openai import OpenAI
@@ -51,6 +57,7 @@ class APIProvider(Enum):
     CV_VLM = "CV + VLM (Hybrid)"
     TWO_STAGE = "Two-Stage Pipeline (CV + VLM)"
     PRECISION_LENS = "Precision Clinical Lens (6-Stage)"
+    YOLO_KARYOGRAM = "YOLO Karyogram (ML Pipeline)"
     MOCK = "Demo Mode (No API)"
 
 
@@ -4205,15 +4212,20 @@ Return ONLY valid JSON:
         if not self.api_key:
             raise ValueError("API key is required for Precision Clinical Lens analysis")
 
-        # Determine which VLM provider to use
-        if OPENAI_AVAILABLE and self.api_key.startswith("sk-"):
+        # Determine which VLM provider to use based on the selected provider mode
+        provider_to_vlm = {
+            APIProvider.OPENAI: "openai",
+            APIProvider.ANTHROPIC: "anthropic",
+            APIProvider.GEMINI: "gemini",
+        }
+        if self.provider in provider_to_vlm:
+            vlm_provider = provider_to_vlm[self.provider]
+        elif OPENAI_AVAILABLE:
             vlm_provider = "openai"
         elif ANTHROPIC_AVAILABLE:
             vlm_provider = "anthropic"
         elif GEMINI_AVAILABLE:
             vlm_provider = "gemini"
-        elif OPENAI_AVAILABLE:
-            vlm_provider = "openai"
         else:
             raise ImportError("No VLM API package available. Install openai, anthropic, or google-genai.")
 
@@ -4545,6 +4557,8 @@ def display_sidebar_settings() -> tuple:
             provider_options.insert(0, "OpenAI GPT-4 Vision")
             if CV2_AVAILABLE:
                 provider_options.insert(1, "CV + VLM (Hybrid)")
+        if TORCH_AVAILABLE and YOLO_AVAILABLE:
+            provider_options.insert(0, "YOLO Karyogram (ML Pipeline)")
 
         selected_provider = st.selectbox(
             "Select AI Provider",
@@ -4554,6 +4568,7 @@ def display_sidebar_settings() -> tuple:
 
         # Map selection to enum
         provider_map = {
+            "YOLO Karyogram (ML Pipeline)": APIProvider.YOLO_KARYOGRAM,
             "OpenAI GPT-4 Vision": APIProvider.OPENAI,
             "CV + VLM (Hybrid)": APIProvider.CV_VLM,
             "Precision Clinical Lens (6-Stage)": APIProvider.PRECISION_LENS,
@@ -4782,8 +4797,9 @@ def display_analysis_section(analyzer: KaryotypeAnalyzer, image: Image.Image, pr
                         st.warning("⚠️ Analysis completed with issues. Check results below.")
 
                 except Exception as e:
-                    st.error(f"❌ Analysis failed: {str(e)}")
-                    st.exception(e)
+                    st.error(f"❌ Analysis failed. Please check your API key and try again.")
+                    with st.expander("Technical details", expanded=False):
+                        st.code(str(e))
 
 
 def get_confidence_class(confidence: float) -> str:
@@ -5389,6 +5405,12 @@ def main():
 
     # 분석 섹션
     if image is not None:
+        # YOLO Karyogram mode — separate UI flow, no API key needed
+        if provider == APIProvider.YOLO_KARYOGRAM:
+            from karyogram_ui import display_karyogram_analysis
+            display_karyogram_analysis(image)
+            return
+
         # API 키 확인 (Mock 모드가 아닌 경우)
         if provider == APIProvider.CONSENSUS:
             # Check if at least 2 API keys are provided for consensus
