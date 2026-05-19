@@ -20,3 +20,13 @@
 - `train_detector.py` — YOLOv8 fine-tuning for chromosome detection
 - `train_classifier.py` — CNN training for 24-class chromosome classification
 - `predict.py` — End-to-end inference pipeline (detect + classify + ISCN)
+
+### SPEC-TRAIN-001: Paired Metaphase-Karyogram Training Pipeline
+
+**New feature**: Supervised training from matched metaphase/karyogram image pairs. Parses clinical workstation screenshots to extract ground-truth labeled chromosome crops.
+
+**Added**:
+- `training/workstation_parser.py` — Splits clinical workstation screenshots (metaphase left + karyogram right), inverts dark backgrounds, extracts labeled chromosome crops
+- `training/pair_trainer.py` — Orchestrates end-to-end paired training: filename matching with leading-zero normalization, crop extraction, YOLO annotation, dataset building with augmentation, sequential detector + classifier training, metrics reporting
+
+**Results**: 10 matched pairs processed, ~20 crops per autosome class, YOLO mAP@0.5 improved from 0.376 to 0.606

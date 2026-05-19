@@ -1,6 +1,6 @@
 # SPEC-TRAIN-001: Paired Metaphase-Karyogram Training Pipeline
 
-**Status**: implemented
+**Status**: completed
 **Created**: 2026-05-19
 **Domain**: TRAIN
 
