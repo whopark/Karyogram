@@ -2,6 +2,16 @@
 
 ## 2026-05-20
 
+### SPEC-GRADCAM-001: CAM Visualization for Chromosome Classification Explainability
+
+**New feature**: Class Activation Map visualization — heatmap overlays on chromosome crops showing which regions drove the classifier's prediction. Uses weight projection (Zhou et al. 2016), zero backward pass.
+
+**Added**:
+- `gradcam.py` (196 lines) — `generate_cam()` + `overlay_heatmap()` + CLI entry point (`python gradcam.py --model ... --image ... --target-class ...`)
+- Streamlit UI integration: "Show CAM Heatmap" checkbox toggle in karyogram results expander
+- Configurable target layer (`backbone.layer4` default, `backbone.layer3` for 8x8 resolution)
+- 80th percentile threshold mask + inferno colormap (perceptually uniform, colorblind-friendly)
+
 ### SPEC-RESNET-001: Replace ChromosomeCNN with Pretrained ResNet18 Backbone
 
 **Enhancement**: Replaced the custom 3-block CNN (ChromosomeCNN/ChromosomeNet) with a pretrained ResNet18 backbone for 24-class chromosome classification. Eliminates 3-way model duplication.

@@ -90,6 +90,7 @@ All VLM SDKs and ML packages are optional with `try/except` import guards and `*
 | Module | Lines | Role |
 |--------|-------|------|
 | `training/chromosome_model.py` | 141 | Shared model definitions: ChromosomeResNet18, legacy ChromosomeCNN, transforms, architecture detection |
+| `gradcam.py` | 196 | CAM visualization: weight-projection class activation maps, heatmap overlay, CLI entry point |
 | `ml_pipeline.py` | 281 | YOLO detection + CNN/ResNet18 classification + ISCN derivation (backward-compat weight loading) |
 | `karyogram_generator.py` | 141 | Karyogram layout logic + public API |
 | `karyogram_render_helpers.py` | 221 | PIL rendering primitives (rows, pairs, grid) |

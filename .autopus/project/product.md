@@ -17,6 +17,7 @@ AI-powered web application for cytogenetic analysis of metaphase spread images. 
 7. **YOLO Karyogram Generation**: ML-based pipeline (YOLOv8 detection + ResNet18/CNN classification) that generates visual karyogram images from metaphase spreads
 8. **ML Training Pipeline**: Auto-annotation, dataset building, YOLO detector training, ResNet18 classifier training (two-phase fine-tuning with ImageNet pretrained backbone) for chromosome detection and classification
 9. **Paired Training Pipeline**: Clinical workstation screenshot parsing, metaphase-karyogram pair matching, supervised training from ground-truth labeled data
+10. **CAM Explainability**: Class Activation Map visualization for chromosome classification — heatmap overlays showing which regions drove the classifier's prediction (Streamlit toggle + CLI)
 
 ## Use Cases
 

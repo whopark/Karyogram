@@ -212,6 +212,9 @@ def display_karyogram_results(result: dict, karyogram_image: Image.Image) -> Non
                 for k, v in sorted(label_counts.items(), key=lambda x: (len(x[0]), x[0]))
             ]
             st.dataframe(detail_rows, use_container_width=True)
+            if st.checkbox("Show CAM Heatmap", key="show_cam"):
+                from gradcam import render_cam_grid  # noqa: PLC0415
+                render_cam_grid(classifications, None, None, st)
         else:
             st.write("No per-chromosome data available.")
 
