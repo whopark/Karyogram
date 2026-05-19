@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .env
+*.egg
+dist/
+build/
 
 # IDE / Tools
 .claude/
@@ -30,3 +33,30 @@ Thumbs.db
 .autopus/design/imports/
 .autopus/runtime/
 .mcp.json
+
+# ML model weights and training artifacts
+*.pt
+*.onnx
+*.pth
+karyotype-analyzer-2/runs/
+karyotype-analyzer-2/training/runs/
+karyotype-analyzer-2/training/models/
+karyotype-analyzer-2/training/annotations/
+karyotype-analyzer-2/training/chromosome_crops/
+karyotype-analyzer-2/training/dataset/
+karyotype-analyzer-2/training/paired_output/
+karyotype-analyzer-2/training/predictions.json
+
+# Test outputs
+karyotype-analyzer-2/test_*.png
+karyotype-analyzer-2/streamlit_*.png
+karyotype-analyzer-2/test_ws_crops/
+screenshot_*.png
+final_*.png
+
+# Data directories (large image sets)
+metaphase/
+karyogram/
+
+# Analysis result files
+metaphase/*.json
