@@ -34,7 +34,7 @@ _DENVER_GROUPS = [
 # ---------------------------------------------------------------------------
 
 @st.cache_resource
-def _load_models(_cache_key: str = "v2") -> tuple:
+def _load_models(_cache_key: str = "v3") -> tuple:
     """Load YOLO detector and CNN classifier. Cached across reruns.
 
     Returns:
