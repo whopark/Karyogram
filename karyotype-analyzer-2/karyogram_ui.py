@@ -34,14 +34,19 @@ _DENVER_GROUPS = [
 # ---------------------------------------------------------------------------
 
 @st.cache_resource
-def _load_models() -> tuple:
+def _load_models(_cache_key: str = "v2") -> tuple:
     """Load YOLO detector and CNN classifier. Cached across reruns.
 
     Returns:
         Tuple of (detector_result, classifier_result) dicts.
     """
     from ml_pipeline import load_detector, load_classifier  # noqa: PLC0415
-    return load_detector(), load_classifier()
+    det = load_detector()
+    cls = load_classifier()
+    # Do not cache error results — clear on next rerun
+    if "error" in det or "error" in cls:
+        st.cache_resource.clear()
+    return det, cls
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +95,14 @@ def display_karyogram_analysis(image: Image.Image) -> None:
         })
         return
 
+    # Confidence threshold slider
+    conf = st.slider(
+        "Detection Confidence Threshold",
+        min_value=0.01, max_value=0.50, value=0.05, step=0.01,
+        help="Lower values detect more chromosomes but may include debris. "
+             "Recommended: 0.05 for current model, 0.25 for well-trained model.",
+    )
+
     # Initialize progress widgets and store in session state so helpers can update them
     status_text = st.empty()
     progress_bar = st.progress(0.0)
@@ -102,13 +115,24 @@ def display_karyogram_analysis(image: Image.Image) -> None:
         detector, classifier = _load_models()
         st.session_state[_KEY_MODELS_LOADED] = True
 
+        # Check for model loading errors
+        if "error" in detector:
+            display_karyogram_error({"type": "missing_weights", "message": detector["error"]})
+            return
+        if "error" in classifier:
+            display_karyogram_error({"type": "missing_weights", "message": classifier["error"]})
+            return
+
         # Stage 2 — detect chromosomes
-        _display_progress("Detecting chromosomes...", 0.35)
+        _display_progress(f"Detecting chromosomes (conf={conf:.2f})...", 0.35)
         from ml_pipeline import run_pipeline  # noqa: PLC0415
-        result = run_pipeline(image, detector, classifier)
+        result = run_pipeline(image, detector, classifier, conf=conf)
 
         # Validate detection count before continuing
         count = result.get("count", result.get("chromosome_count", 0))
+        if "error" in result:
+            display_karyogram_error({"type": "pipeline_error", "message": result["error"]})
+            return
         if count == 0:
             display_karyogram_error({"type": "no_detections"})
             return
@@ -279,6 +303,10 @@ def display_karyogram_error(error_info: dict) -> None:
             "Place weights in `weights/` or train: "
             "`python train.py --data karyotype.yaml --epochs 100`"
         )
+
+    elif error_type == "pipeline_error":
+        msg = error_info.get("message", "Unknown pipeline error")
+        st.error(f"Analysis pipeline error: `{msg}`")
 
     elif error_type == "no_detections":
         st.warning(

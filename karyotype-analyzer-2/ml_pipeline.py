@@ -26,8 +26,10 @@ DENVER_GROUPS = {
     "G": ["chr21", "chr22", "chrY"],
 }
 
-DEFAULT_DETECTOR_PATH = "runs/detect/training/runs/chromosome_v2/weights/best.pt"
-DEFAULT_CLASSIFIER_PATH = "training/models/chromosome_classifier.pth"
+# Resolve default paths relative to this file's directory, not CWD
+_MODULE_DIR = Path(__file__).resolve().parent
+DEFAULT_DETECTOR_PATH = str(_MODULE_DIR / "runs" / "detect" / "training" / "runs" / "chromosome_v2" / "weights" / "best.pt")
+DEFAULT_CLASSIFIER_PATH = str(_MODULE_DIR / "training" / "models" / "chromosome_classifier.pth")
 
 try:
     import torch
