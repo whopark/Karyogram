@@ -17,86 +17,50 @@ streamlit run karyotype-analyzer-2/app.py
 
 # Run with specific port
 streamlit run karyotype-analyzer-2/app.py --server.port 8501
+
+# Run syndrome tests (requires OPENAI_API_KEY env var)
+cd karyotype-analyzer-2 && python test_syndromes.py
+cd karyotype-analyzer-2 && python test_triple_x_fix.py
 ```
 
 ## Architecture
 
-### Single-File Structure (`karyotype-analyzer-2/app.py`)
+### Single-File Application (`karyotype-analyzer-2/app.py`, ~5400 lines)
 
-**API Provider System**:
-- `APIProvider` enum: OPENAI, ANTHROPIC, GEMINI, CONSENSUS, CV_VLM, TWO_STAGE, PRECISION_LENS, MOCK
-- Graceful fallback with try/except imports for each SDK
-- Package availability flags: `OPENAI_AVAILABLE`, `ANTHROPIC_AVAILABLE`, `GEMINI_AVAILABLE`
+The entire application lives in one file. The major classes form a processing pipeline:
 
-**SegmentationMatrix Class** (Task 2 - 얽힌 매듭 풀기):
-- Path 1 - Semantic Segmentation: pixel-level background/chromosome/overlap classification, stitching-based overlap recovery using gradient direction
-- Path 2 - Instance Segmentation: marker-controlled watershed with gradient-enhanced boundaries for per-instance masks
-- `segment_and_separate()`: runs both paths and picks the best result
+**Computer Vision Pipeline** (CV-based chromosome detection):
+1. `DigitalPreprocessor` — Denoising (background subtraction → debris removal → CLAHE → bilateral smoothing) and chromosome straightening (skeleton extraction → perpendicular strip sampling)
+2. `SegmentationMatrix` — Dual-path segmentation: semantic (pixel-level classification with stitching-based overlap recovery) and instance (marker-controlled watershed)
+3. `ClusterRouter` — Classifies chromosome clusters via adjacency/BFS into isolated/touching/one-overlap/multi-overlap, routes each to the appropriate segmentation strategy
+4. `ChromosomeClassifier` — 24-class classification (chr1-22, X, Y) using Gaussian similarity scoring on size (45%), centromere index (30%), banding (15%), aspect ratio (10%), with pair-based refinement enforcing autosome=2
+5. `EnsembleClassifier` — 5-strategy ensemble (Simple CNN / Siamese Contrastive / SRAS-Enhanced / VariFocal Fusion / Multi-Task) with weighted majority voting
+6. `ChromosomeDetector` — Orchestrates the full CV pipeline: denoise → threshold → route → segment → straighten → NMS → ensemble classify
 
-**ClusterRouter Class** (Task 3 - 사전 라우팅 메커니즘):
-- Adjacency matrix construction via dilation overlap detection
-- BFS-based connected component clustering
-- 4-class classification: isolated / touching / one-overlap / multi-overlap
-- Route A (touching) → instance segmentation, Route B (one-overlap) → semantic stitching, Route C (multi-overlap) → multi-pass
+**VLM Analysis Providers**:
+- `KaryotypeAnalyzer` — Routes to provider-specific implementations (`_analyze_with_openai`, `_analyze_with_anthropic`, `_analyze_with_gemini`, `_mock_analysis`). Parses JSON from VLM responses using regex fallback (`r'\{[\s\S]*\}'`)
+- `PrecisionClinicalLens` — 6-stage sequential VLM pipeline: counting → Denver group classification → individual chromosome ID → translocation detection → cross-validation → final ISCN notation. Each stage feeds results to the next
 
-**DigitalPreprocessor Class** (Task 4 - 디지털 전처리):
-- Cascaded Denoising: adaptive background subtraction → debris removal (inpainting) → CLAHE contrast → bilateral smoothing
-- Chromosome Straightening: distance-transform skeleton → nearest-neighbor path ordering → perpendicular strip sampling
-- Curvature measurement via discrete curvature formula on medial axis
+**API Provider Modes** (`APIProvider` enum):
+- Single-model: OPENAI, ANTHROPIC, GEMINI
+- Hybrid: CV_VLM (CV + VLM), TWO_STAGE (CV then VLM), CONSENSUS (multi-model voting)
+- Advanced: PRECISION_LENS (6-stage pipeline)
+- Demo: MOCK (no API needed)
 
-**ChromosomeClassifier Class** (Task 5 - 24-클래스 분류):
-- 24 reference templates (chr1-22, X, Y) with size_pct, centromere_index, Denver group
-- Feature extraction: size ratio, centromere index (narrowest constriction), aspect ratio, super-resolved banding
-- Gaussian similarity scoring with weighted combination (size 45%, centromere 30%, banding 15%, AR 10%)
-- Pair-based refinement: enforces autosome=2 constraint, reassigns lowest-confidence over-represented classes
-- Karyotype summary: ISCN notation, abnormality detection (trisomy/monosomy), sex determination
+**UI Layer** (Streamlit, lines ~4493-5430):
+- Sidebar: provider selection, API key inputs, package status
+- Main: image upload, analysis trigger, results display (ISCN notation, metrics, abnormalities)
+- State: `st.session_state` for `analysis_result`, `uploaded_image`, `raw_response`
 
-**EnsembleClassifier Class** (models.png - 5가지 분류 알고리즘 앙상블):
-- Strategy 1: Simple CNN - size + centromere lightweight classification
-- Strategy 2: Siamese Contrastive - cosine distance metric on banding embeddings
-- Strategy 3: SRAS-Enhanced - super-resolution before feature extraction
-- Strategy 4: VariFocal Fusion - global morphology + local banding band fusion
-- Strategy 5: Multi-Task Ensemble - classification × segmentation quality × banding quality
-- Weighted majority voting (15/20/20/25/20%) + pair-based refinement
+### API Integration
 
-**ChromosomeDetector Class** (Task 1-5 + models 통합):
-- Pipeline: denoise → multi-threshold → ClusterRouter → SegmentationMatrix → overlap split → straighten+banding → 2-stage NMS → 5-strategy ensemble classify
+| Provider | Model | SDK Package |
+|----------|-------|-------------|
+| OpenAI | gpt-4o | `openai>=1.12.0` |
+| Anthropic | claude-sonnet-4-20250514 | `anthropic>=0.18.0` |
+| Google | gemini-2.0-flash | `google-genai>=1.0.0` |
 
-**PrecisionClinicalLens Class** (6-stage sequential pipeline):
-- Stage 1: 계수 (Counting) - Chromosome counting with optional CV pre-analysis
-- Stage 2: 분류 (Classification) - Denver group classification (A-G)
-- Stage 3: 클러스터 분류 (Cluster Classification) - Individual chromosome ID (1-22, X, Y)
-- Stage 4: 전이 (Translocation Detection) - Structural abnormality detection
-- Stage 5: 분석 (Comprehensive Analysis) - Cross-validation and synthesis
-- Stage 6: 이상 탐지 (Abnormality Detection) - Final ISCN notation and clinical diagnosis
-- Each stage builds on previous results; supports OpenAI, Anthropic, and Gemini backends
-
-**KaryotypeAnalyzer Class**:
-- Multi-provider analysis with `analyze()` method routing to provider-specific implementations
-- `_analyze_with_openai()`: GPT-4o with high-detail image analysis
-- `_analyze_with_anthropic()`: Claude Sonnet 4 via messages API
-- `_analyze_with_gemini()`: Gemini 2.0 Flash via google-genai
-- `_analyze_with_precision_lens()`: Routes to PrecisionClinicalLens 6-stage pipeline
-- `_parse_response()`: Extracts JSON from raw model output with regex fallback
-- `_mock_analysis()`: Demo mode with simulated karyotype results
-
-**System Prompt** (lines 118-149):
-- `KARYOTYPE_ANALYSIS_PROMPT`: Structured prompt requesting JSON output with ISCN notation, chromosome count, abnormalities, confidence score, and clinical interpretation
-
-**Display Functions** (lines 416-784):
-- `display_sidebar_settings()`: Provider selection dropdown, API key inputs with links
-- `display_api_status()`: Shows installed/missing package status
-- `display_results()`: ISCN notation, metrics, abnormalities, raw API response expander
-
-**State Management**: `st.session_state` for `analysis_result`, `uploaded_image`, `raw_response`
-
-## API Integration Details
-
-| Provider | Model | SDK Package | Key Source |
-|----------|-------|-------------|------------|
-| OpenAI | gpt-4o | `openai>=1.12.0` | platform.openai.com |
-| Anthropic | claude-sonnet-4-20250514 | `anthropic>=0.18.0` | console.anthropic.com |
-| Google | gemini-1.5-pro | `google-generativeai>=0.4.0` | aistudio.google.com |
+All SDKs are optional — the app gracefully falls back with `try/except` imports and `*_AVAILABLE` flags.
 
 ## Key Concepts
 
@@ -106,10 +70,10 @@ streamlit run karyotype-analyzer-2/app.py --server.port 8501
 
 ## Development Notes
 
-- Korean comments throughout codebase (페이지 설정 = page config)
+- Korean comments throughout codebase (페이지 설정 = page config, 디지털 전처리 = digital preprocessing)
 - Image preprocessing: RGBA/P modes converted to RGB before base64 encoding
-- JSON extraction uses regex `r'\{[\s\S]*\}'` to handle markdown-wrapped responses
-- Low temperature (0.1) for consistent, deterministic analysis results
+- Low temperature (0.1) for all VLM calls for deterministic analysis
+- Deployment config exists for Railway (`Procfile`, `railway.toml`)
 
 
 <!-- AUTOPUS:BEGIN -->

@@ -1,0 +1,47 @@
+{
+  "timestamp": "2026-05-19T19:11:17.751749",
+  "commit": "e0d1139",
+  "build": {
+    "status": "pass",
+    "command": "python -c ast.parse (15 files)",
+    "duration_ms": 800
+  },
+  "e2e": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "scenarios": [
+      {
+        "id": "S1",
+        "name": "Model loading",
+        "status": "pass"
+      },
+      {
+        "id": "S2",
+        "name": "ML pipeline",
+        "status": "pass"
+      },
+      {
+        "id": "S3",
+        "name": "Karyogram generation",
+        "status": "pass"
+      },
+      {
+        "id": "S4",
+        "name": "Workstation parser",
+        "status": "pass"
+      },
+      {
+        "id": "S5",
+        "name": "Pair matching",
+        "status": "pass"
+      }
+    ]
+  },
+  "browser": {
+    "status": "pass",
+    "console_errors": [],
+    "snapshot_diff": null
+  },
+  "verdict": "pass"
+}
