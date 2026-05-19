@@ -108,7 +108,7 @@ def display_karyogram_analysis(image: Image.Image) -> None:
         result = run_pipeline(image, detector, classifier)
 
         # Validate detection count before continuing
-        count = result.get("chromosome_count", 0)
+        count = result.get("count", result.get("chromosome_count", 0))
         if count == 0:
             display_karyogram_error({"type": "no_detections"})
             return
@@ -122,7 +122,7 @@ def display_karyogram_analysis(image: Image.Image) -> None:
         # Stage 4 — generate karyogram image
         _display_progress("Generating karyogram...", 0.80)
         from karyogram_generator import generate_karyogram  # noqa: PLC0415
-        karyogram_image = generate_karyogram(result)
+        karyogram_image, _meta = generate_karyogram(result.get("classifications", []), image)
 
         # Persist to session state
         st.session_state[_KEY_RESULT] = result
@@ -172,9 +172,9 @@ def display_karyogram_results(result: dict, karyogram_image: Image.Image) -> Non
 
     # Summary metrics
     col_count, col_sex, col_iscn = st.columns(3)
-    col_count.metric("Chromosome Count", result.get("chromosome_count", "—"))
-    col_sex.metric("Sex Chromosomes", result.get("sex_chromosomes", "—"))
-    col_iscn.metric("ISCN Notation", result.get("iscn_notation", "—"))
+    col_count.metric("Chromosome Count", result.get("count", result.get("chromosome_count", "—")))
+    col_sex.metric("Sex Chromosomes", result.get("sex", result.get("sex_chromosomes", "—")))
+    col_iscn.metric("ISCN Notation", result.get("notation", result.get("iscn_notation", "—")))
 
     # Abnormalities
     abnormalities = result.get("abnormalities", [])
@@ -186,12 +186,11 @@ def display_karyogram_results(result: dict, karyogram_image: Image.Image) -> Non
 
     # Denver group distribution table
     st.subheader("Denver Group Distribution")
-    per_chr = result.get("per_chromosome", {})
-    sex_chrs = result.get("sex_chromosomes", "")
+    denver = result.get("denver_groups", {})
 
     rows = []
     for group_label, chr_numbers, expected in _DENVER_GROUPS:
-        found = sum(per_chr.get(str(n), 0) for n in chr_numbers)
+        found = denver.get(group_label, 0)
         status = "OK" if found == expected else ("Low" if found < expected else "High")
         rows.append({
             "Group": group_label,
@@ -201,26 +200,25 @@ def display_karyogram_results(result: dict, karyogram_image: Image.Image) -> Non
             "Status": status,
         })
 
-    # Sex chromosome row
-    sex_found = sum(
-        per_chr.get(c, 0) for c in ["X", "Y"]
-    ) or len(sex_chrs)
     rows.append({
         "Group": "Sex",
         "Chromosomes": "X, Y",
-        "Expected": "—",
-        "Found": sex_found,
-        "Status": "—",
+        "Expected": 2,
+        "Found": denver.get("C_sex", 0) + denver.get("G_sex", 0),
+        "Status": result.get("sex", "—"),
     })
 
     st.dataframe(rows, use_container_width=True)
 
     # Per-chromosome details (expandable)
+    classifications = result.get("classifications", [])
     with st.expander("Per-Chromosome Classification Details"):
-        if per_chr:
+        if classifications:
+            from collections import Counter
+            label_counts = Counter(c.get("label", "") for c in classifications)
             detail_rows = [
                 {"Chromosome": k, "Count": v}
-                for k, v in sorted(per_chr.items(), key=lambda x: (len(x[0]), x[0]))
+                for k, v in sorted(label_counts.items(), key=lambda x: (len(x[0]), x[0]))
             ]
             st.dataframe(detail_rows, use_container_width=True)
         else:

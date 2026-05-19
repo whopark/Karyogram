@@ -209,20 +209,28 @@ def build_karyotype(classifications: list) -> dict:
 
 def run_pipeline(
     image_pil,
-    detector_path: Optional[str] = None,
-    classifier_path: Optional[str] = None,
+    detector=None,
+    classifier_info=None,
     conf: float = 0.25,
 ) -> dict:
     """Full ML inference pipeline: detect -> classify -> karyotype.
 
+    Args:
+        image_pil: PIL Image to analyze.
+        detector: Pre-loaded detector dict from load_detector(), or None to auto-load.
+        classifier_info: Pre-loaded classifier dict from load_classifier(), or None to auto-load.
+        conf: YOLO confidence threshold.
+
     Returns a result dict with all fields needed by karyogram_generator.
     On failure returns a dict with an "error" key.
     """
-    detector = load_detector(detector_path)
+    if detector is None:
+        detector = load_detector()
     if "error" in detector:
         return {"error": detector["error"], "count": 0, "classifications": []}
 
-    classifier_info = load_classifier(classifier_path)
+    if classifier_info is None:
+        classifier_info = load_classifier()
     if "error" in classifier_info:
         return {"error": classifier_info["error"], "count": 0, "classifications": []}
 
