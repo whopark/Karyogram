@@ -4,10 +4,11 @@ Single source of truth for ChromosomeResNet18 (new) and ChromosomeCNN (legacy).
 """
 
 import logging
-from typing import Optional
 
+import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision import transforms
 from torchvision.models import resnet18, ResNet18_Weights
 
@@ -94,6 +95,51 @@ class ChromosomeCNN(nn.Module):
         return self.classifier(self.features(x))
 
 
+class FocalLoss(nn.Module):
+    """Focal loss with label smoothing for imbalanced classification."""
+
+    def __init__(self, gamma=2.0, alpha=None, label_smoothing=0.1, reduction="mean"):
+        super().__init__()
+        self.gamma = gamma
+        self.alpha = alpha
+        self.label_smoothing = label_smoothing
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        ce_loss = F.cross_entropy(
+            inputs, targets, weight=self.alpha,
+            label_smoothing=self.label_smoothing, reduction="none",
+        )
+        p_t = torch.exp(-ce_loss)
+        focal_loss = ((1 - p_t) ** self.gamma) * ce_loss
+        if self.reduction == "mean":
+            return focal_loss.mean()
+        elif self.reduction == "sum":
+            return focal_loss.sum()
+        return focal_loss
+
+
+def compute_class_weights(counts: np.ndarray, device: torch.device) -> torch.Tensor:
+    """Inverse-frequency class weights for imbalanced datasets."""
+    counts = counts.astype(np.float32)
+    counts = np.where(counts == 0, 1, counts)
+    weights = 1.0 / counts
+    weights /= weights.sum()
+    weights *= NUM_CLASSES
+    return torch.tensor(weights, dtype=torch.float32, device=device)
+
+
+def mixup_data(x, y, alpha=0.2):
+    """Apply Mixup augmentation to a batch."""
+    if alpha > 0:
+        lam = torch.distributions.Beta(alpha, alpha).sample().item()
+    else:
+        lam = 1.0
+    idx = torch.randperm(x.size(0), device=x.device)
+    mixed_x = lam * x + (1 - lam) * x[idx]
+    return mixed_x, y, y[idx], lam
+
+
 def _grayscale_to_rgb(img):
     """Convert a grayscale PIL image to RGB by replicating the single channel."""
     return img.convert("RGB")
@@ -104,11 +150,13 @@ def build_augment_transform() -> transforms.Compose:
     return transforms.Compose([
         transforms.Resize((IMG_H, IMG_W)),
         transforms.Lambda(_grayscale_to_rgb),
-        transforms.RandomRotation(15),
+        transforms.RandomRotation(30),
         transforms.ColorJitter(brightness=0.3, contrast=0.3),
         transforms.RandomHorizontalFlip(),
+        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
         transforms.ToTensor(),
         transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+        transforms.RandomErasing(p=0.3),
     ])
 
 

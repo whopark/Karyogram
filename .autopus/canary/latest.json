@@ -1,45 +1,30 @@
 {
-  "timestamp": "2026-05-19T19:11:17.751749",
-  "commit": "e0d1139",
+  "timestamp": "2026-05-20T00:00:00Z",
+  "commit": "82461b5",
   "build": {
     "status": "pass",
-    "command": "python -c ast.parse (15 files)",
-    "duration_ms": 800
+    "command": "python -m py_compile (8 files)",
+    "duration_ms": 2100
   },
   "e2e": {
-    "total": 5,
-    "passed": 5,
+    "total": 10,
+    "passed": 10,
     "failed": 0,
     "scenarios": [
-      {
-        "id": "S1",
-        "name": "Model loading",
-        "status": "pass"
-      },
-      {
-        "id": "S2",
-        "name": "ML pipeline",
-        "status": "pass"
-      },
-      {
-        "id": "S3",
-        "name": "Karyogram generation",
-        "status": "pass"
-      },
-      {
-        "id": "S4",
-        "name": "Workstation parser",
-        "status": "pass"
-      },
-      {
-        "id": "S5",
-        "name": "Pair matching",
-        "status": "pass"
-      }
+      {"id": "S1", "name": "exports_and_constants", "status": "pass"},
+      {"id": "S3", "name": "resnet18_forward_pass", "status": "pass"},
+      {"id": "S4", "name": "eval_transform_shape", "status": "pass"},
+      {"id": "S5", "name": "legacy_cnn_forward", "status": "pass"},
+      {"id": "S6", "name": "freeze_unfreeze", "status": "pass"},
+      {"id": "S7", "name": "architecture_detection_and_compat_load", "status": "pass"},
+      {"id": "S8", "name": "cache_key_v4", "status": "pass"},
+      {"id": "S9", "name": "requirements_torch_torchvision", "status": "pass"},
+      {"id": "S10", "name": "pair_trainer_integration", "status": "pass"},
+      {"id": "S12", "name": "torch_available_guard", "status": "pass"}
     ]
   },
   "browser": {
-    "status": "pass",
+    "status": "skip",
     "console_errors": [],
     "snapshot_diff": null
   },

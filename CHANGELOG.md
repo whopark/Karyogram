@@ -2,6 +2,23 @@
 
 ## 2026-05-20
 
+### SPEC-TRAIN-002: Enhanced Training Recipe for ChromosomeResNet18
+
+**Enhancement**: Improved classifier training with label smoothing, focal loss, enhanced augmentation, and optional Mixup.
+
+**Added**:
+- `FocalLoss` class in `chromosome_model.py` with configurable gamma, alpha, and label smoothing
+- `mixup_data()` helper for Mixup augmentation (Beta(0.2, 0.2))
+- `--loss-type {ce,focal}` CLI flag for loss function selection
+- `--mixup` CLI flag for optional Mixup augmentation in both training phases
+- Enhanced augmentation: RandomRotation(30), RandomAffine, RandomErasing(0.3)
+- Label smoothing (0.1) applied to default CrossEntropyLoss
+
+**Changed**:
+- Refactored `compute_class_weights` from `train_classifier.py` to `chromosome_model.py`
+- Phase 2 now reloads best warmup checkpoint before fine-tuning
+- Fixed `FocalLoss` reduction="none" to return per-element tensor
+
 ### SPEC-GRADCAM-001: CAM Visualization for Chromosome Classification Explainability
 
 **New feature**: Class Activation Map visualization — heatmap overlays on chromosome crops showing which regions drove the classifier's prediction. Uses weight projection (Zhou et al. 2016), zero backward pass.

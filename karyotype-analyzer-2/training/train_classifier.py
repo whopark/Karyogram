@@ -15,12 +15,14 @@ from torch.utils.data import DataLoader, Dataset, Subset
 
 try:
     from training.chromosome_model import (
-        ChromosomeResNet18, build_augment_transform, build_eval_transform,
+        ChromosomeResNet18, FocalLoss, build_augment_transform,
+        build_eval_transform, compute_class_weights, mixup_data,
         CLASS_NAMES, IMG_H, IMG_W, NUM_CLASSES,
     )
 except ImportError:
     from chromosome_model import (
-        ChromosomeResNet18, build_augment_transform, build_eval_transform,
+        ChromosomeResNet18, FocalLoss, build_augment_transform,
+        build_eval_transform, compute_class_weights, mixup_data,
         CLASS_NAMES, IMG_H, IMG_W, NUM_CLASSES,
     )
 
@@ -80,16 +82,6 @@ def stratified_split(
     return train_idx, val_idx
 
 
-def compute_class_weights(counts: np.ndarray, device: torch.device) -> torch.Tensor:
-    """Inverse-frequency class weights for imbalanced datasets."""
-    counts = counts.astype(np.float32)
-    counts = np.where(counts == 0, 1, counts)
-    weights = 1.0 / counts
-    weights /= weights.sum()
-    weights *= NUM_CLASSES
-    return torch.tensor(weights, dtype=torch.float32, device=device)
-
-
 @torch.no_grad()
 def evaluate(model: nn.Module, loader: DataLoader, device: torch.device):
     """Return overall accuracy and per-class correct/total arrays."""
@@ -142,7 +134,7 @@ def confusion_summary(model: nn.Module, loader: DataLoader, device: torch.device
         print(f"  {CLASS_NAMES[true_cls]:6s} -> {CLASS_NAMES[pred_cls]:6s}: {count} errors")
 
 
-# @AX:WARN: [AUTO] two-phase training with separate optimizers — Phase 1 (frozen backbone) and Phase 2 (full fine-tune) use different optimizer/scheduler instances; ensure best checkpoint from warmup is not overwritten if Phase 2 never improves
+# @AX:NOTE: [AUTO] two-phase training with separate optimizers — Phase 1 (frozen backbone) saves best checkpoint; Phase 2 reloads it before unfreezing to fine-tune from validated best state
 def train(args: argparse.Namespace) -> None:
     device = (
         torch.device(args.device)
@@ -172,8 +164,13 @@ def train(args: argparse.Namespace) -> None:
 
     model = ChromosomeResNet18().to(device)
     class_weights = compute_class_weights(counts, device)
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    loss_type = args.loss_type
+    if loss_type == "focal":
+        criterion = FocalLoss(gamma=2.0, alpha=class_weights, label_smoothing=0.1)
+    else:
+        criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
 
+    use_mixup = args.mixup
     best_val_acc = 0.0
     patience_counter = 0
     output_path = Path(args.output)
@@ -194,7 +191,12 @@ def train(args: argparse.Namespace) -> None:
             for images, labels in train_loader:
                 images, labels = images.to(device), labels.to(device)
                 warmup_opt.zero_grad()
-                loss = criterion(model(images), labels)
+                if use_mixup:
+                    images, tgt_a, tgt_b, lam = mixup_data(images, labels)
+                    logits = model(images)
+                    loss = lam * criterion(logits, tgt_a) + (1 - lam) * criterion(logits, tgt_b)
+                else:
+                    loss = criterion(model(images), labels)
                 loss.backward()
                 warmup_opt.step()
                 running_loss += loss.item() * images.size(0)
@@ -210,10 +212,10 @@ def train(args: argparse.Namespace) -> None:
                 torch.save(model.state_dict(), output_path)
 
     # Phase 2: fine-tune entire model
+    if warmup_epochs > 0 and output_path.exists():
+        model.load_state_dict(torch.load(output_path, map_location=device, weights_only=True))
     model.unfreeze_backbone()
-    finetune_epochs = args.epochs - warmup_epochs
-    if finetune_epochs <= 0:
-        finetune_epochs = 1
+    finetune_epochs = max(1, args.epochs - warmup_epochs)
 
     # @AX:NOTE: [AUTO] magic constant — backbone LR is 1/10 of head LR; differential learning rate strategy for pretrained feature preservation
     optimizer = optim.AdamW([
@@ -229,7 +231,12 @@ def train(args: argparse.Namespace) -> None:
         for images, labels in train_loader:
             images, labels = images.to(device), labels.to(device)
             optimizer.zero_grad()
-            loss = criterion(model(images), labels)
+            if use_mixup:
+                images, tgt_a, tgt_b, lam = mixup_data(images, labels)
+                logits = model(images)
+                loss = lam * criterion(logits, tgt_a) + (1 - lam) * criterion(logits, tgt_b)
+            else:
+                loss = criterion(model(images), labels)
             loss.backward()
             optimizer.step()
             running_loss += loss.item() * images.size(0)
@@ -274,20 +281,16 @@ def train(args: argparse.Namespace) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        description="Train ResNet18 classifier for chromosome classification (24 classes)."
-    )
-    p.add_argument("--data_dir", required=True,
-                   help="Root dir with per-class subdirs (chr1/, ..., chrY/).")
+    p = argparse.ArgumentParser(description="Train ResNet18 classifier for chromosome classification (24 classes).")
+    p.add_argument("--data_dir", required=True, help="Root dir with per-class subdirs (chr1/, ..., chrY/).")
     p.add_argument("--epochs", type=int, default=50)
-    p.add_argument("--warmup_epochs", type=int, default=5,
-                   help="Number of warmup epochs with frozen backbone (default: 5).")
+    p.add_argument("--warmup_epochs", type=int, default=5, help="Warmup epochs with frozen backbone.")
     p.add_argument("--batch_size", type=int, default=32)
     p.add_argument("--lr", type=float, default=1e-3)
-    p.add_argument("--output", default="models/chromosome_classifier.pth",
-                   help="Path where the best model checkpoint is saved.")
-    p.add_argument("--device", default="auto",
-                   help="'auto', 'cpu', 'cuda', or 'mps'.")
+    p.add_argument("--output", default="models/chromosome_classifier.pth", help="Best model checkpoint path.")
+    p.add_argument("--device", default="auto", help="'auto', 'cpu', 'cuda', or 'mps'.")
+    p.add_argument("--loss-type", choices=["ce", "focal"], default="ce", dest="loss_type", help="Loss function: cross-entropy or focal.")
+    p.add_argument("--mixup", action="store_true", help="Enable Mixup augmentation.")
     return p.parse_args()
 
 
