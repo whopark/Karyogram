@@ -2,6 +2,21 @@
 
 ## 2026-05-21
 
+### SPEC-SEX-001: Sex-Aware Pair Refinement for chrX/chrY Recognition
+
+**Enhancement**: Added sex chromosome assignment logic to `pair_refine` post-processing, using elimination + crop size heuristic.
+
+**Added**:
+- `ml_refine.py` (79 lines) — extracted `pair_refine` function with two-phase refinement
+  - Phase 1: autosome pairing (each=2, existing logic)
+  - Phase 2: sex chromosome assignment by elimination from Group C/G + crop area size discrimination
+- `classify_chromosomes` now computes crop areas from YOLO bbox dimensions and passes to `pair_refine`
+- Backward-compatible `crop_areas=None` default parameter
+
+**Changed**:
+- `ml_pipeline.py` reduced from 337 to 257 lines (pair_refine extracted to ml_refine.py)
+- `ml_pipeline.py` imports `pair_refine` from `ml_refine` instead of inline `_pair_refine`
+
 ### SPEC-UX-001: Collapsible Sidebar Sections
 
 **Enhancement**: Sidebar reorganized with `st.expander` for progressive disclosure.

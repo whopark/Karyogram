@@ -38,6 +38,8 @@ try:
 except ImportError:
     _TORCH_AVAILABLE = False
 
+from ml_refine import pair_refine
+
 if _TORCH_AVAILABLE:
     from training.chromosome_model import (
         ChromosomeResNet18,
@@ -145,37 +147,6 @@ def _crop_to_tensor(crop_pil, device, crop_size=None):
         return torch.from_numpy(arr).unsqueeze(0).to(device)
 
 
-# @AX:WARN: [AUTO] iterative reassignment algorithm — worst-case O(classes * chromosomes * max_iter); correctness depends on sorted swap order; parallel calls are safe (no shared state)
-def _pair_refine(labels: list, confs: list, max_iter: int = 10) -> list:
-    """Reassign over-represented autosomes (target=2) to under-represented ones.
-
-    Uses lowest-confidence occurrence of the over-represented class as swap candidate.
-    """
-    labels, confs = list(labels), list(confs)
-    autosome_labels = IDX_TO_LABEL[:22]
-    for _ in range(max_iter):
-        counts = {lbl: labels.count(lbl) for lbl in IDX_TO_LABEL}
-        changed = False
-        for lbl in autosome_labels:
-            while counts.get(lbl, 0) > 2:
-                under = min(
-                    (l for l in autosome_labels if counts.get(l, 0) < 2),
-                    key=lambda l: counts.get(l, 0),
-                    default=None,
-                )
-                if under is None:
-                    break
-                lbl_indices = [i for i, l in enumerate(labels) if l == lbl]
-                worst = min(lbl_indices, key=lambda i: confs[i])
-                labels[worst] = under
-                counts[lbl] -= 1
-                counts[under] = counts.get(under, 0) + 1
-                changed = True
-        if not changed:
-            break
-    return labels
-
-
 def classify_chromosomes(classifier_info: dict, detections: list) -> list:
     """Classify each detected crop. Returns list of enriched detection dicts."""
     if not detections:
@@ -188,7 +159,12 @@ def classify_chromosomes(classifier_info: dict, detections: list) -> list:
         confs_t, preds_t = probs.max(dim=1)
     raw_labels = [IDX_TO_LABEL[p.item()] for p in preds_t]
     raw_confs = confs_t.tolist()
-    refined = _pair_refine(raw_labels, raw_confs)
+    # Extract crop areas from YOLO detection bboxes for sex chromosome size discrimination
+    crop_areas = []
+    for d in detections:
+        bbox = d.get("bbox", [0, 0, 0, 0])
+        crop_areas.append((bbox[2] - bbox[0]) * (bbox[3] - bbox[1]))
+    refined = pair_refine(raw_labels, raw_confs, crop_areas=crop_areas)
     return [
         {"bbox": d["bbox"], "label": lbl, "confidence": round(c, 4), "crop": d["crop"]}
         for d, lbl, c in zip(detections, refined, raw_confs)

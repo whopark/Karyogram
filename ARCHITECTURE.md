@@ -85,13 +85,14 @@ Chromosome Karyotype Analyzer: a Streamlit web application for AI-powered cytoge
 
 All VLM SDKs and ML packages are optional with `try/except` import guards and `*_AVAILABLE` flags.
 
-## ML Pipeline Modules (SPEC-KARYO-001, SPEC-RESNET-001)
+## ML Pipeline Modules (SPEC-KARYO-001, SPEC-RESNET-001, SPEC-SEX-001)
 
 | Module | Lines | Role |
 |--------|-------|------|
 | `training/chromosome_model.py` | 141 | Shared model definitions: ChromosomeResNet18, legacy ChromosomeCNN, transforms, architecture detection |
 | `gradcam.py` | 196 | CAM visualization: weight-projection class activation maps, heatmap overlay, CLI entry point |
-| `ml_pipeline.py` | 281 | YOLO detection + CNN/ResNet18 classification + ISCN derivation (backward-compat weight loading) |
+| `ml_pipeline.py` | 257 | YOLO detection + CNN/ResNet18 classification + ISCN derivation (backward-compat weight loading) |
+| `ml_refine.py` | 79 | Pair refinement: autosome pairing (Phase 1) + sex chromosome assignment by elimination + crop size (Phase 2) |
 | `karyogram_generator.py` | 141 | Karyogram layout logic + public API |
 | `karyogram_render_helpers.py` | 221 | PIL rendering primitives (rows, pairs, grid) |
 | `karyogram_ui.py` | 293 | Streamlit UI for karyogram mode |
