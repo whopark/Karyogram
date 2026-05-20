@@ -2,6 +2,22 @@
 
 ## 2026-05-20
 
+### SPEC-SPLIT-001: Split app.py Monolith into Multi-Module Architecture
+
+**Refactor**: Decomposed the 5,452-line single-file monolith into domain-organized packages.
+
+**Added**:
+- `providers.py` (57 lines) — centralized APIProvider enum and import guards
+- `cv/` package (14 files, 2,303 lines) — DigitalPreprocessor, SegmentationMatrix, ClusterRouter, ChromosomeClassifier, EnsembleClassifier, ChromosomeDetector with helper splits
+- `vlm/` package (6 files, 1,120 lines) — KaryotypeAnalyzer, PrecisionClinicalLens, prompts with helper splits
+- `ui/` package (10 files, 799 lines) — sidebar, upload, analysis, results, report, styles with helpers
+
+**Changed**:
+- `app.py` rewritten as 101-line thin entry point (from 5,452 lines, -98%)
+- Updated external script imports: `run_all_analyses.py`, `run_pipeline.py`, `debug_cv_detection.py`, `test_triple_x_fix.py`
+- All new files under 300-line hard limit (max: 283 lines in vlm/analyzer.py)
+- Zero behavioral changes — E2E scenarios 10/10 pass
+
 ### SPEC-TRAIN-002: Enhanced Training Recipe for ChromosomeResNet18
 
 **Enhancement**: Improved classifier training with label smoothing, focal loss, enhanced augmentation, and optional Mixup.

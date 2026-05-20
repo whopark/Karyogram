@@ -41,10 +41,9 @@ class _FakeStreamlit:
 sys.modules['streamlit'] = _FakeStreamlit()
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app import (
-    KaryotypeAnalyzer, APIProvider, PrecisionClinicalLens,
-    ChromosomeDetector, CV2_AVAILABLE
-)
+from providers import APIProvider, CV2_AVAILABLE
+from vlm import KaryotypeAnalyzer, PrecisionClinicalLens
+from cv import ChromosomeDetector
 
 # ── Metaphase-specific single VLM prompt ──
 

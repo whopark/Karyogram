@@ -40,7 +40,9 @@ class _FakeStreamlit:
 sys.modules['streamlit'] = _FakeStreamlit()
 
 sys.path.insert(0, str(Path(__file__).parent))
-from app import PrecisionClinicalLens, ChromosomeDetector, CV2_AVAILABLE
+from providers import CV2_AVAILABLE
+from vlm import PrecisionClinicalLens
+from cv import ChromosomeDetector
 
 
 def run_pipeline(image_dir: str, provider: str = "openai"):
