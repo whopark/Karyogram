@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-05-21
+
+### SPEC-UX-001: Collapsible Sidebar Sections
+
+**Enhancement**: Sidebar reorganized with `st.expander` for progressive disclosure.
+
+**Changed**:
+- Provider selector always visible at top (outside expanders)
+- API key input wrapped in collapsed "API Key" expander
+- Package status and About section wrapped in collapsed "Status & Info" expander
+- Removed `st.divider()` calls (expanders provide visual separation)
+- `display_api_status()` moved inside Status & Info expander
+
 ## 2026-05-20
 
 ### SPEC-SPLIT-001: Split app.py Monolith into Multi-Module Architecture
