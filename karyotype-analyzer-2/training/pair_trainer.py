@@ -13,27 +13,42 @@ from pathlib import Path
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
 
 
-def normalize_stem(filename: str) -> str:
-    """Normalize filename stem by stripping leading zeros from numeric segments.
+def extract_pair_key(filename: str) -> str:
+    """Extract the numeric matching key from a paired filename.
 
-    Example: '26-k-0659' -> '26-k-659', '26-k-0659-1' -> '26-k-659-1'
+    Supports two naming conventions:
+      - Suffix letter: '0001m.png' / '0001k.png' -> '0001'
+      - Hyphen-separated: '26-k-0659.png' / '26-m-0659.png' -> '26-659'
+
+    The key is normalized so leading zeros in hyphen-separated numeric
+    segments are stripped (e.g. '26-k-0659' -> '26-659').
     """
     stem = Path(filename).stem
-    return re.sub(r"-0+(\d)", r"-\1", stem)
+
+    # Convention 1: trailing letter suffix (e.g. '0001m', '0001k')
+    m = re.fullmatch(r"(\d+)[mkMK]", stem)
+    if m:
+        return m.group(1)
+
+    # Convention 2: hyphen-separated with type marker (e.g. '26-k-0659')
+    cleaned = re.sub(r"[-_](m|k|meta|kary)\b", "", stem, flags=re.IGNORECASE)
+    cleaned = re.sub(r"-0+(\d)", r"-\1", cleaned)
+    return cleaned
 
 
 def find_matched_pairs(metaphase_dir: str, karyogram_dir: str) -> list:
     """Find filename-matched image pairs between two directories.
 
     Returns list of (metaphase_path, karyogram_path) tuples.
-    Uses normalize_stem() for fuzzy comparison. Logs unmatched files to stderr.
+    Uses extract_pair_key() for flexible convention matching.
+    Logs unmatched files to stderr.
     """
     meta_dir = Path(metaphase_dir)
     kary_dir = Path(karyogram_dir)
 
-    meta_map = {normalize_stem(p.name): p for p in meta_dir.iterdir()
+    meta_map = {extract_pair_key(p.name): p for p in meta_dir.iterdir()
                 if p.suffix.lower() in IMAGE_EXTS}
-    kary_map = {normalize_stem(p.name): p for p in kary_dir.iterdir()
+    kary_map = {extract_pair_key(p.name): p for p in kary_dir.iterdir()
                 if p.suffix.lower() in IMAGE_EXTS}
 
     matched = []
@@ -186,6 +201,8 @@ def run_training(
             lr=1e-3,
             output=str(classifier_out),
             device=device,
+            loss_type="focal",
+            mixup=True,
         )
         train_classifier(clf_args)
         metrics["classifier_top1"] = "see training log"
@@ -224,77 +241,6 @@ def print_summary(pairs: int, crops: dict, metrics: dict) -> None:
     print(f"{sep}\n")
 
 
-def main() -> None:
-    """CLI entry point for paired metaphase-karyogram training."""
-    default_device = "cpu"
-    try:
-        import torch
-        if torch.cuda.is_available():
-            default_device = "0"
-        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            default_device = "mps"
-    except ImportError:
-        pass
-
-    parser = argparse.ArgumentParser(
-        description="Orchestrate paired metaphase-karyogram training pipeline."
-    )
-    parser.add_argument("--metaphase_dir", required=True,
-                        help="Directory containing metaphase spread images.")
-    parser.add_argument("--karyogram_dir", required=True,
-                        help="Directory containing arranged karyogram images.")
-    parser.add_argument("--output_dir", default="training/paired_output",
-                        help="Root output directory (default: training/paired_output).")
-    parser.add_argument("--epochs_detector", type=int, default=50)
-    parser.add_argument("--epochs_classifier", type=int, default=30)
-    parser.add_argument("--aug_factor", type=int, default=5)
-    parser.add_argument("--batch_detector", type=int, default=4)
-    parser.add_argument("--batch_classifier", type=int, default=16)
-    parser.add_argument("--device", default=default_device,
-                        help=f"Compute device: 'cpu', '0' (GPU), 'mps' (default: {default_device}).")
-    parser.add_argument("--skip_detector", action="store_true",
-                        help="Skip YOLO detector training.")
-    parser.add_argument("--skip_classifier", action="store_true",
-                        help="Skip CNN classifier training.")
-    args = parser.parse_args()
-
-    out_dir = Path(args.output_dir)
-    crops_dir = out_dir / "crops"
-    annotations_dir = out_dir / "annotations"
-
-    print("[INFO] Scanning for matched pairs ...")
-    pairs = find_matched_pairs(args.metaphase_dir, args.karyogram_dir)
-    print(f"[INFO] Found {len(pairs)} matched pair(s).")
-    if not pairs:
-        print("[ERROR] No matched pairs found — aborting.", file=sys.stderr)
-        sys.exit(1)
-
-    print("[INFO] Extracting labeled crops from karyogram images ...")
-    crop_counts = extract_labeled_crops(args.karyogram_dir, str(crops_dir))
-
-    print("[INFO] Generating YOLO annotations from metaphase images ...")
-    annotation_count = generate_yolo_annotations(args.metaphase_dir, str(annotations_dir))
-    print(f"[INFO] Total annotations generated: {annotation_count}")
-
-    metrics: dict = {}
-    if not args.skip_detector or not args.skip_classifier:
-        metrics = run_training(
-            crops_dir=str(crops_dir),
-            annotations_dir=str(annotations_dir),
-            metaphase_dir=args.metaphase_dir,
-            output_dir=str(out_dir),
-            epochs_detector=args.epochs_detector if not args.skip_detector else 0,
-            epochs_classifier=args.epochs_classifier if not args.skip_classifier else 0,
-            aug_factor=args.aug_factor,
-            batch_detector=args.batch_detector,
-            batch_classifier=args.batch_classifier,
-            device=args.device,
-        )
-    else:
-        print("[INFO] Both detector and classifier skipped.")
-
-    print_summary(len(pairs), crop_counts, metrics)
-
-
 if __name__ == "__main__":
+    from pair_trainer_cli import main
     main()

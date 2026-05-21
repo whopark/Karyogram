@@ -47,8 +47,13 @@ def _upload_image(pil_image: Image.Image) -> str:
 
 
 def _download_image(url: str) -> Image.Image:
-    """Download an image from a URL and return as PIL Image."""
+    """Download an image from a URL and return as PIL Image.
+
+    Only HTTPS URLs are accepted to prevent SSRF attacks.
+    """
     import urllib.request  # noqa: PLC0415
+    if not url.startswith("https://"):
+        raise EnhancementError(f"Unexpected URL scheme (expected https): {url[:80]}")
     with urllib.request.urlopen(url, timeout=60) as resp:
         data = resp.read()
     return Image.open(io.BytesIO(data)).convert("RGB")
@@ -78,12 +83,13 @@ def enhance_karyogram(
     if not _FAL_AVAILABLE:
         raise EnhancementError("fal-client package is not installed. Run: pip install fal-client")
 
+    prev_key = os.environ.get("FAL_KEY")
     os.environ["FAL_KEY"] = api_key
     enhancement_prompt = prompt or DEFAULT_PROMPT
 
     try:
         image_url = _upload_image(raw_image)
-        log.info("Uploaded karyogram to CDN: %s", image_url)
+        log.info("Submitted karyogram for enhancement")
 
         result = fal_client.subscribe(
             "fal-ai/flux/dev/image-to-image",
@@ -106,3 +112,8 @@ def enhance_karyogram(
     except Exception as exc:
         log.warning("FLUX.1 enhancement failed: %s", exc)
         raise EnhancementError(f"FLUX.1 API call failed: {exc}") from exc
+    finally:
+        if prev_key is not None:
+            os.environ["FAL_KEY"] = prev_key
+        else:
+            os.environ.pop("FAL_KEY", None)

@@ -9,11 +9,11 @@ Modes:
 
 import os
 import sys
-import json
 import time
 import base64
 import io
 import re
+import json
 from pathlib import Path
 from datetime import datetime
 from PIL import Image
@@ -44,6 +44,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from providers import APIProvider, CV2_AVAILABLE
 from vlm import KaryotypeAnalyzer, PrecisionClinicalLens
 from cv import ChromosomeDetector
+from run_all_report import (
+    extract_result, print_comparison_table, print_statistics,
+    print_agreement_matrix, save_results,
+)
 
 # ── Metaphase-specific single VLM prompt ──
 
@@ -173,17 +177,6 @@ METHODS = [
 ]
 
 
-def extract_result(r: dict) -> dict:
-    return {
-        "notation": r.get("notation", "ERROR"),
-        "count": r.get("chromosome_count", r.get("total_chromosome_count", "?")),
-        "sex": r.get("sex_chromosomes", "?"),
-        "confidence": r.get("confidence", "?"),
-        "abnormal": bool(r.get("abnormalities")),
-        "abnormalities": r.get("abnormalities", []),
-    }
-
-
 def run_all(image_dir: str):
     image_dir = Path(image_dir)
     api_key = os.environ.get("OPENAI_API_KEY", "")
@@ -229,140 +222,11 @@ def run_all(image_dir: str):
                 all_results[img_path.name][method_name] = {"error": str(e), "_elapsed": round(elapsed, 1)}
         print()
 
-    # ── Comparison Table ──
-    print(f"\n{'=' * 150}")
-    print(f"  COMPARISON TABLE")
-    print(f"{'=' * 150}")
-
-    header = f"{'File':25s}"
-    for m_name, _ in METHODS:
-        header += f" | {m_name:30s}"
-    header += " | Consensus"
-    print(header)
-    print("-" * 150)
-
-    for fname in sorted(all_results.keys()):
-        methods = all_results[fname]
-        row = f"{fname:25s}"
-        notations = []
-
-        for m_name, _ in METHODS:
-            r = methods.get(m_name, {})
-            if "error" in r:
-                cell = "ERROR"
-            else:
-                ex = extract_result(r)
-                nota = ex["notation"]
-                if len(nota) > 25:
-                    nota = nota[:22] + "..."
-                cell = f"{nota} (n={ex['count']})"
-                notations.append(ex["notation"].split(" or ")[0].strip())
-            row += f" | {cell:30s}"
-
-        # Simple consensus: most common notation
-        if notations:
-            from collections import Counter
-            counts = Counter(notations)
-            top, top_count = counts.most_common(1)[0]
-            agreement = f"{top_count}/{len(notations)}"
-            row += f" | {top} [{agreement}]"
-        else:
-            row += f" | N/A"
-
-        print(row)
-
-    print("-" * 150)
-
-    # ── Statistics ──
-    print(f"\n{'=' * 150}")
-    print(f"  STATISTICS BY METHOD")
-    print(f"{'=' * 150}")
-
-    for m_name, _ in METHODS:
-        results = [all_results[f].get(m_name, {}) for f in sorted(all_results)]
-        ok = [r for r in results if "error" not in r]
-        errs = len(results) - len(ok)
-
-        extracted = [extract_result(r) for r in ok]
-        normal = sum(1 for e in extracted if not e["abnormal"])
-        abnormal = sum(1 for e in extracted if e["abnormal"])
-
-        counts = [e["count"] for e in extracted if isinstance(e["count"], int)]
-        avg_count = sum(counts) / len(counts) if counts else 0
-
-        confs = [e["confidence"] for e in extracted if isinstance(e["confidence"], (int, float))]
-        avg_conf = sum(confs) / len(confs) if confs else 0
-
-        times = [all_results[f].get(m_name, {}).get("_elapsed", 0) for f in all_results]
-        total_time = sum(times)
-
-        nota_dist = {}
-        for e in extracted:
-            n = e["notation"].split(" or ")[0].strip()
-            # Simplify to base notation
-            if "46," in n:
-                key = "46,N (normal)"
-            elif "47," in n and "+21" in n:
-                key = "47,+21 (T21)"
-            elif "45," in n:
-                key = "45,X (Turner)"
-            elif "92," in n:
-                key = "92 (tetraploid)"
-            elif "55," in n:
-                key = "55+ (hyperdiploid)"
-            else:
-                key = n[:20]
-            nota_dist[key] = nota_dist.get(key, 0) + 1
-
-        print(f"\n  {m_name}")
-        print(f"    Normal: {normal}  Abnormal: {abnormal}  Errors: {errs}")
-        print(f"    Avg count: {avg_count:.1f}  Avg confidence: {avg_conf:.1f}%")
-        print(f"    Total time: {total_time:.0f}s  Avg: {total_time/len(results):.1f}s/image")
-        print(f"    Distribution: {nota_dist}")
-
-    # ── Agreement Matrix ──
-    print(f"\n{'=' * 150}")
-    print(f"  INTER-METHOD AGREEMENT MATRIX")
-    print(f"{'=' * 150}")
-
     method_names = [m[0] for m in METHODS]
-    files = sorted(all_results.keys())
-
-    # Build notation vectors per method
-    nota_vectors = {}
-    for m_name in method_names:
-        vec = []
-        for f in files:
-            r = all_results[f].get(m_name, {})
-            if "error" in r:
-                vec.append("ERROR")
-            else:
-                vec.append(extract_result(r)["notation"].split(" or ")[0].strip())
-        nota_vectors[m_name] = vec
-
-    # Pairwise agreement
-    print(f"\n  {'':20s}", end="")
-    for m in method_names:
-        print(f" {m:15s}", end="")
-    print()
-
-    for m1 in method_names:
-        print(f"  {m1:20s}", end="")
-        for m2 in method_names:
-            if m1 == m2:
-                print(f" {'--':>15s}", end="")
-            else:
-                agree = sum(1 for a, b in zip(nota_vectors[m1], nota_vectors[m2]) if a == b and a != "ERROR")
-                total = sum(1 for a, b in zip(nota_vectors[m1], nota_vectors[m2]) if a != "ERROR" and b != "ERROR")
-                pct = (agree / total * 100) if total > 0 else 0
-                print(f" {f'{agree}/{total} ({pct:.0f}%)':>15s}", end="")
-        print()
-
-    # Save all results
-    output_path = image_dir / "all_analysis_results.json"
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(all_results, f, indent=2, ensure_ascii=False, default=str)
-    print(f"\n  All results saved to: {output_path}")
+    print_comparison_table(all_results, method_names)
+    print_statistics(all_results, method_names)
+    print_agreement_matrix(all_results, method_names)
+    save_results(all_results, image_dir)
 
 
 if __name__ == "__main__":
