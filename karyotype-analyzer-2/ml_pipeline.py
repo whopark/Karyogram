@@ -106,7 +106,7 @@ def load_classifier(weights_path: Optional[str] = None, device=None) -> dict:
         return {"error": f"Failed to load classifier: {exc}"}
 
 
-def detect_chromosomes(detector: dict, image_pil, conf: float = 0.25) -> list:
+def detect_chromosomes(detector: dict, image_pil, conf: float = 0.30) -> list:
     """Run YOLO on image_pil. Returns list of {"bbox": [x,y,w,h], "crop": PIL.Image}."""
     from PIL import Image  # noqa: PLC0415
     img_np = np.array(image_pil.convert("RGB"))
@@ -210,7 +210,7 @@ def run_pipeline(
     image_pil,
     detector=None,
     classifier_info=None,
-    conf: float = 0.25,
+    conf: float = 0.30,
 ) -> dict:
     """Full ML inference pipeline: detect -> classify -> karyotype.
 

@@ -232,7 +232,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--detector",
                    default="runs/detect/chromosome_detector/weights/best.pt")
     p.add_argument("--classifier", default="models/chromosome_classifier.pth")
-    p.add_argument("--conf", type=float, default=0.25)
+    p.add_argument("--conf", type=float, default=0.30)
     p.add_argument("--device", default="auto")
     p.add_argument("--output", default="results.json")
     return p.parse_args()
