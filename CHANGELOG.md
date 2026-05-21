@@ -2,6 +2,20 @@
 
 ## 2026-05-21
 
+### SPEC-ENHANCE-001: FLUX.1 Image-to-Image Karyogram Enhancement
+
+**New feature**: Optional post-processing step that sends the raw karyogram to FLUX.1 dev img2img API (via fal.ai) for a visually polished, clinically presentable version.
+
+**Added**:
+- `karyogram_enhance.py` (108 lines) — FLUX.1 API integration: CDN upload, img2img call, image download, graceful fallback
+- "Enhance Karyogram (FLUX.1)" checkbox toggle in karyogram UI
+- `fal-client>=1.0.0` as optional dependency
+
+**Changed**:
+- `karyogram_ui.py` — added `_try_enhance()` helper for conditional FLUX.1 enhancement after `generate_karyogram()`
+- `karyogram_ui_models.py` — moved `display_karyogram_download()` from karyogram_ui.py for line budget management
+- All files remain under 300-line limit
+
 ### SPEC-SEX-001: Sex-Aware Pair Refinement for chrX/chrY Recognition
 
 **Enhancement**: Added sex chromosome assignment logic to `pair_refine` post-processing, using elimination + crop size heuristic.

@@ -41,3 +41,21 @@ def _display_progress(stage: str, progress: float) -> None:
     """
     st.session_state["_karyogram_progress_bar"].progress(progress)
     st.session_state["_karyogram_status_text"].text(stage)
+
+
+# ---------------------------------------------------------------------------
+# Download helper (moved from karyogram_ui.py for line budget)
+# ---------------------------------------------------------------------------
+
+def display_karyogram_download(karyogram_image) -> None:
+    """Render a download button for the generated karyogram PNG."""
+    import io as _io  # noqa: PLC0415
+    buf = _io.BytesIO()
+    karyogram_image.save(buf, format="PNG")
+    buf.seek(0)
+    st.download_button(
+        label="Download Karyogram PNG",
+        data=buf,
+        file_name="karyogram.png",
+        mime="image/png",
+    )

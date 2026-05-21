@@ -6,10 +6,11 @@ for the ML-based chromosome karyogram pipeline.
 """
 
 import io
+import os
 import streamlit as st
 from PIL import Image
 
-from karyogram_ui_models import _load_models, _display_progress
+from karyogram_ui_models import _load_models, _display_progress, display_karyogram_download
 
 
 # ---------------------------------------------------------------------------
@@ -31,9 +32,25 @@ _DENVER_GROUPS = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
+def _try_enhance(karyogram_image: Image.Image) -> Image.Image:
+    """Conditionally enhance karyogram via FLUX.1 if toggle is on and key is available."""
+    enhance = st.checkbox("Enhance Karyogram (FLUX.1)", value=False,
+                          help="Use FLUX.1 img2img to produce a polished clinical karyogram")
+    if not enhance:
+        return karyogram_image
+    from karyogram_enhance import get_fal_key, EnhancementError  # noqa: PLC0415
+    fal_key = os.environ.get("FAL_KEY") or st.text_input("fal.ai API Key (FAL_KEY)", type="password")
+    if not fal_key:
+        st.warning("Provide a FAL_KEY to enable enhancement.")
+        return karyogram_image
+    try:
+        from karyogram_enhance import enhance_karyogram  # noqa: PLC0415
+        with st.spinner("Enhancing karyogram with FLUX.1..."):
+            return enhance_karyogram(karyogram_image, fal_key)
+    except (EnhancementError, Exception) as exc:  # noqa: BLE001
+        st.warning(f"Enhancement failed, showing raw karyogram: {exc}")
+        return karyogram_image
+
 
 def display_karyogram_analysis(image: Image.Image) -> None:
     """Main entry point called from app.py when YOLO_KARYOGRAM mode is selected.
@@ -114,6 +131,9 @@ def display_karyogram_analysis(image: Image.Image) -> None:
         _display_progress("Generating karyogram...", 0.80)
         from karyogram_generator import generate_karyogram  # noqa: PLC0415
         karyogram_image, _meta = generate_karyogram(result.get("classifications", []), image)
+
+        # Stage 5 — optional FLUX.1 enhancement
+        karyogram_image = _try_enhance(karyogram_image)
 
         # Persist to session state
         st.session_state[_KEY_RESULT] = result
@@ -217,28 +237,6 @@ def display_karyogram_results(result: dict, karyogram_image: Image.Image) -> Non
                 render_cam_grid(classifications, None, None, st)
         else:
             st.write("No per-chromosome data available.")
-
-
-# ---------------------------------------------------------------------------
-# Download
-# ---------------------------------------------------------------------------
-
-def display_karyogram_download(karyogram_image: Image.Image) -> None:
-    """Render a download button for the generated karyogram PNG.
-
-    Args:
-        karyogram_image: PIL Image to be offered for download.
-    """
-    buf = io.BytesIO()
-    karyogram_image.save(buf, format="PNG")
-    buf.seek(0)
-
-    st.download_button(
-        label="Download Karyogram PNG",
-        data=buf,
-        file_name="karyogram.png",
-        mime="image/png",
-    )
 
 
 # ---------------------------------------------------------------------------

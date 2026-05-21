@@ -85,7 +85,7 @@ Chromosome Karyotype Analyzer: a Streamlit web application for AI-powered cytoge
 
 All VLM SDKs and ML packages are optional with `try/except` import guards and `*_AVAILABLE` flags.
 
-## ML Pipeline Modules (SPEC-KARYO-001, SPEC-RESNET-001, SPEC-SEX-001)
+## ML Pipeline Modules (SPEC-KARYO-001, SPEC-RESNET-001, SPEC-SEX-001, SPEC-ENHANCE-001)
 
 | Module | Lines | Role |
 |--------|-------|------|
@@ -95,8 +95,9 @@ All VLM SDKs and ML packages are optional with `try/except` import guards and `*
 | `ml_refine.py` | 79 | Pair refinement: autosome pairing (Phase 1) + sex chromosome assignment by elimination + crop size (Phase 2) |
 | `karyogram_generator.py` | 141 | Karyogram layout logic + public API |
 | `karyogram_render_helpers.py` | 221 | PIL rendering primitives (rows, pairs, grid) |
-| `karyogram_ui.py` | 293 | Streamlit UI for karyogram mode |
-| `karyogram_ui_models.py` | 43 | Model loading + progress display (extracted from karyogram_ui) |
+| `karyogram_enhance.py` | 108 | FLUX.1 img2img enhancement: optional post-processing via fal.ai API for polished clinical karyograms |
+| `karyogram_ui.py` | 294 | Streamlit UI for karyogram mode (with optional FLUX.1 enhancement toggle) |
+| `karyogram_ui_models.py` | 61 | Model loading, progress display, download helper |
 
 ## Deployment
 
