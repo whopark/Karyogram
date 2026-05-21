@@ -38,12 +38,12 @@ def get_fal_key() -> Optional[str]:
 
 
 def _upload_image(pil_image: Image.Image) -> str:
-    """Upload PIL Image to fal.media CDN and return the URL."""
+    """Convert PIL Image to data URI for the FLUX.1 API."""
+    import base64  # noqa: PLC0415
     buf = io.BytesIO()
     pil_image.save(buf, format="PNG")
-    buf.seek(0)
-    url = fal_client.upload(buf, content_type="image/png")
-    return url
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{b64}"
 
 
 def _download_image(url: str) -> Image.Image:
